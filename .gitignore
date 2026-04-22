@@ -80,10 +80,7 @@ out
 
 # Nuxt.js build / generate output
 .nuxt
-# NOTE: no global `dist/` ignore — the plugin ships bundled dist/ so
-# Claude Code users don't need to run `npm install` in the plugin cache.
-# If some other tool creates a `dist/` elsewhere in this repo, add a
-# specific path-scoped rule below.
+dist
 
 # Gatsby files
 .cache/

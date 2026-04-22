@@ -1,27 +1,15 @@
 import js from '@eslint/js';
-import tsParser from '@typescript-eslint/parser';
-import tsPlugin from '@typescript-eslint/eslint-plugin';
 
 export default [
   {
-    ignores: [
-      'node_modules/**',
-      'dist/**',
-      'coverage/**',
-      '**/*.ndjson',
-      'tests/fixtures/**',
-      'build.mjs',
-    ],
+    ignores: ['node_modules/**', 'coverage/**', '**/*.ndjson', 'tests/fixtures/**'],
   },
   js.configs.recommended,
   {
-    files: ['**/*.ts'],
+    files: ['**/*.mjs', '**/*.js'],
     languageOptions: {
-      parser: tsParser,
-      parserOptions: {
-        ecmaVersion: 2022,
-        sourceType: 'module',
-      },
+      ecmaVersion: 2023,
+      sourceType: 'module',
       globals: {
         console: 'readonly',
         process: 'readonly',
@@ -32,17 +20,12 @@ export default [
         clearInterval: 'readonly',
         setImmediate: 'readonly',
         URL: 'readonly',
+        globalThis: 'readonly',
       },
     },
-    plugins: {
-      '@typescript-eslint': tsPlugin,
-    },
     rules: {
-      ...tsPlugin.configs.recommended.rules,
-      'no-unused-vars': 'off',
-      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
-      '@typescript-eslint/no-explicit-any': 'warn',
-      'no-undef': 'off',
+      'no-unused-vars': ['error', { argsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' }],
+      'no-empty': ['error', { allowEmptyCatch: true }],
       'no-redeclare': 'off',
     },
   },

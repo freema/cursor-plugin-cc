@@ -68,9 +68,9 @@ From GitHub once published:
 
 > ⚠️ **Do not skip `/reload-plugins`.** Right after `/plugin install` the `/cursor:*` commands are NOT yet available — Claude Code only picks them up after a plugin reload. If you see `Unknown command: /cursor:setup`, you forgot this step — run `/reload-plugins` and try again.
 
-The plugin ships **pre-bundled JavaScript** — Claude Code's `/plugin install` gives you everything in one step; you do not need to `npm install` or run a build. Each slash command invokes a single self-contained `node dist/<cmd>.js` with all runtime deps inlined.
+The plugin ships as **plain ESM JavaScript with zero runtime dependencies** — just the Node stdlib. `/plugin install` is literally all you need; no `npm install`, no build step, no `dist/` folder. Each slash command runs `node "${CLAUDE_PLUGIN_ROOT}/scripts/<cmd>.mjs"` directly from the committed source.
 
-The first `/cursor:setup` run tells you if `cursor-agent` is missing or unauthenticated. If you are developing the plugin itself and want to run the TypeScript sources directly (not the bundled `dist/`), see [CONTRIBUTING](#contributing) below.
+The first `/cursor:setup` run tells you if `cursor-agent` is missing or unauthenticated. For hacking on the plugin itself (tests, lint, formatting), see [Contributing](#contributing) below.
 
 ## Usage
 
@@ -280,20 +280,21 @@ This re-opens the same Cursor session without going through Claude Code — hand
 
 ## Contributing
 
-Pure plugin users can skip this section — everything you need ships pre-bundled.
+Plugin users can skip this section — there is nothing to build.
 
-For developing the plugin itself, clone and work inside `plugins/cursor/`:
+For hacking on the plugin itself, clone and work inside `plugins/cursor/`:
 
 ```bash
 git clone https://github.com/freema/cursor-plugin-cc
 cd cursor-plugin-cc/plugins/cursor
-npm install
-npm run typecheck
+npm install    # only dev deps: vitest, eslint, prettier
 npm test
-npm run build   # re-bundles dist/ via esbuild
+npm run lint
 ```
 
-`dist/` is checked into git on purpose — it is the ship artefact, and Claude Code's plugin cache uses it directly. When you edit a script, re-run `npm run build` before committing so `dist/` stays in sync. CI verifies typecheck + tests + lint on every PR across Node 18.18 / 20 / 22 on Ubuntu + macOS.
+The source **is** the ship artefact — `scripts/*.mjs` files are what Claude Code executes in the user's cache. No bundler, no compile step. If you add a runtime dependency, you are on the wrong plugin. Keep the surface zero-dep: replace third-party helpers with small inline stdlib-based equivalents (see `scripts/lib/run.mjs` as the pattern — it replaced `execa`).
+
+CI runs `npm test` and `npm run lint` on every PR across Node 18.18 / 20 / 22 on Ubuntu + macOS.
 
 ## Roadmap
 

@@ -1,16 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { main as browserMain } from '../scripts/browser.js';
-import { listJobs } from '../scripts/lib/jobs.js';
+import { main as browserMain } from '../scripts/browser.mjs';
+import { listJobs } from '../scripts/lib/jobs.mjs';
 import {
   BROWSER_FALLBACK_FIXTURE,
   BROWSER_HAPPY_FIXTURE,
   BROWSER_HAPPY_NESTED_FIXTURE,
   STUB_BIN,
   makeTempHome,
-} from './helpers.js';
+} from './helpers.mjs';
 
-describe('browser.ts', () => {
-  let tmp: ReturnType<typeof makeTempHome>;
+describe('browser', () => {
+  let tmp;
   const prevHome = process.env.CURSOR_PLUGIN_CC_HOME;
   const prevBin = process.env.CURSOR_AGENT_BIN;
   const prevFix = process.env.CURSOR_AGENT_STUB_FIXTURE;
@@ -60,7 +60,7 @@ describe('browser.ts', () => {
     }
     const jobs = listJobs(tmp.dir);
     expect(jobs.length).toBe(1);
-    const job = jobs[0]!;
+    const job = jobs[0];
     expect(job.prompt).toContain('(discover)');
   });
 
@@ -79,7 +79,7 @@ describe('browser.ts', () => {
     }
     const jobs = listJobs(tmp.dir);
     expect(jobs.length).toBe(1);
-    const job = jobs[0]!;
+    const job = jobs[0];
     expect(job.status).toBe('done');
     expect(job.prompt).toContain('BROWSER');
     expect(job.prompt).toContain('http://localhost:3000');
@@ -101,9 +101,7 @@ describe('browser.ts', () => {
       outSpy.mockRestore();
     }
     const jobs = listJobs(tmp.dir);
-    const job = jobs[0]!;
-    // MCP tool calls are nested in assistant.message.content[] — the post-flight check
-    // must recurse; otherwise it would spuriously mark this as failed.
+    const job = jobs[0];
     expect(job.status).toBe('done');
     expect(job.summary ?? '').not.toMatch(/post-flight/i);
   });
@@ -118,14 +116,12 @@ describe('browser.ts', () => {
         '--',
         'http://localhost:3000 verify page loads',
       ]);
-      // Shell exit mirrors Cursor's exit so the report renders normally in Claude Code.
-      // The "failed" verdict is carried in the persisted job record + the inline warning.
       expect(code).toBe(0);
     } finally {
       outSpy.mockRestore();
     }
     const jobs = listJobs(tmp.dir);
-    const job = jobs[0]!;
+    const job = jobs[0];
     expect(job.status).toBe('failed');
     expect(job.summary).toMatch(/post-flight/i);
     expect(job.summary).toMatch(/curl/i);

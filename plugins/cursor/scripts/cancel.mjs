@@ -1,10 +1,13 @@
 #!/usr/bin/env node
-import { fileURLToPath } from 'node:url';
-import { collapseArguments, parseArgv } from './lib/argv.js';
-import { repoRoot } from './lib/git.js';
-import { cancelJob, findRunningJobs } from './lib/jobs.js';
+import { collapseArguments, parseArgv } from './lib/args.mjs';
+import { repoRoot } from './lib/git.mjs';
+import { cancelJob, findRunningJobs } from './lib/jobs.mjs';
 
-export async function main(rawArgv: string[]): Promise<number> {
+/**
+ * @param {string[]} rawArgv
+ * @returns {Promise<number>}
+ */
+export async function main(rawArgv) {
   const delimiterIdx = rawArgv.indexOf('--');
   const firstHalf = delimiterIdx === -1 ? [] : rawArgv.slice(0, delimiterIdx);
   const userRaw =
@@ -12,7 +15,6 @@ export async function main(rawArgv: string[]): Promise<number> {
   const combined = [...firstHalf, ...collapseArguments(userRaw)];
   const { positional } = parseArgv(combined);
   const root = await repoRoot(process.cwd());
-
   let id = positional[0];
   if (!id) {
     const running = findRunningJobs(root);
@@ -32,7 +34,6 @@ export async function main(rawArgv: string[]): Promise<number> {
     process.stderr.write('No job id resolved.\n');
     return 2;
   }
-
   const updated = await cancelJob(root, id);
   if (!updated) {
     process.stderr.write(`No job \`${id}\` found for this repository.\n`);
@@ -42,13 +43,8 @@ export async function main(rawArgv: string[]): Promise<number> {
   return 0;
 }
 
-const invokedAsScript = (() => {
-  try {
-    return process.argv[1] === fileURLToPath(import.meta.url);
-  } catch {
-    return false;
-  }
-})();
+import { invokedAsScript as __isScript } from './lib/invoked.mjs';
+const invokedAsScript = __isScript(import.meta.url);
 
 if (invokedAsScript) {
   main(process.argv.slice(2))

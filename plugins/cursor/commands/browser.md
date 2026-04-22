@@ -4,6 +4,6 @@ argument-hint: '<url> <what to verify...>'
 allowed-tools: Bash(node:*)
 ---
 
-!`node "${CLAUDE_PLUGIN_ROOT}/dist/browser.js" -- "$ARGUMENTS"`
+!`node "${CLAUDE_PLUGIN_ROOT}/scripts/browser.mjs" -- "$ARGUMENTS"`
 
 Present the browser report verbatim. If the preflight fails because the `chrome-devtools` MCP is not configured, relay the setup instructions from the error to the user — do not try to install or configure the MCP yourself.

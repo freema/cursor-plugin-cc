@@ -1,17 +1,16 @@
 #!/usr/bin/env node
-import { fileURLToPath } from 'node:url';
-import { nanoid } from 'nanoid';
-import { collapseArguments, parseArgv } from './lib/argv.js';
-import { listConfiguredMcps, resolveModel, runHeadless } from './lib/cursor.js';
-import { isGitRepo, repoRoot } from './lib/git.js';
-import { createJob, rawLogPath as rawLogPathFor, updateJob } from './lib/jobs.js';
-import { ensureDir, jobsDir, logsDir } from './lib/paths.js';
-import { extractChatId, summariseEvents } from './lib/parse.js';
+import { collapseArguments, parseArgv } from './lib/args.mjs';
+import { listConfiguredMcps, resolveModel, runHeadless } from './lib/cursor.mjs';
+import { isGitRepo, repoRoot } from './lib/git.mjs';
+import { id as newId } from './lib/id.mjs';
+import { createJob, rawLogPath as rawLogPathFor, updateJob } from './lib/jobs.mjs';
+import { ensureDir, jobsDir, logsDir } from './lib/paths.mjs';
+import { extractChatId, summariseEvents } from './lib/parse.mjs';
 
 const BOOLEAN_FLAGS = ['background', 'fresh', 'force', 'git-check', 'skip-mcp-check', 'help'];
 const MCP_NAME = 'chrome-devtools';
 
-function buildBrowserPrompt(url: string | undefined, what: string): string {
+function buildBrowserPrompt(url, what) {
   const urlLine = url
     ? `**Target URL:** ${url}`
     : `**Target URL:** not supplied — you MUST discover it before testing. In order:\n  1. Call \`list_pages\` and if a \`localhost\` / \`127.0.0.1\` tab is already open, use that.\n  2. Otherwise read the repo for a dev-server URL: \`package.json\` scripts (look for \`dev\`, \`start\`, \`serve\`), \`vite.config.*\`, \`next.config.*\`, \`docker-compose.yml\`, \`.env*\`. Pick the most likely \`http://localhost:<port>\`.\n  3. If you still cannot determine a URL, try \`http://localhost:3000\`, \`:5173\`, \`:4173\`, \`:8080\`, \`:8000\` in that order — \`new_page\` each, \`wait_for\` a non-empty body, stop on the first that loads without a hard network error.\n  4. If NONE respond, stop and report "no dev server reachable" — do not invent a URL.`;
@@ -44,35 +43,29 @@ function buildBrowserPrompt(url: string | undefined, what: string): string {
   ].join('\n');
 }
 
-interface ToolUse {
-  name: string;
-  input: unknown;
-}
-
 // Walks an event tree and yields every `tool_use` block it finds. Cursor's
 // stream-json usually nests tool calls inside `assistant.message.content[]`
 // (matching the Anthropic Messages API), but different models / versions may
 // emit them at the top level, inside `tool`, or inside `tool_use`. We recurse
 // so we don't care about the exact path.
-function* extractToolUses(node: unknown): Iterable<ToolUse> {
+function* extractToolUses(node) {
   if (node == null || typeof node !== 'object') return;
   if (Array.isArray(node)) {
     for (const item of node) yield* extractToolUses(item);
     return;
   }
-  const obj = node as Record<string, unknown>;
-  const type = obj['type'];
-  const name = typeof obj['name'] === 'string' ? (obj['name'] as string) : undefined;
+  const type = node.type;
+  const name = typeof node.name === 'string' ? node.name : undefined;
   if ((type === 'tool_use' || type === 'tool_call') && name) {
     yield {
       name,
-      input: obj['input'] ?? obj['arguments'] ?? obj['params'] ?? obj['tool_input'],
+      input: node.input ?? node.arguments ?? node.params ?? node.tool_input,
     };
   }
-  for (const v of Object.values(obj)) yield* extractToolUses(v);
+  for (const v of Object.values(node)) yield* extractToolUses(v);
 }
 
-function usedBrowserMcp(events: Array<Record<string, unknown>>): boolean {
+function usedBrowserMcp(events) {
   for (const ev of events) {
     for (const tu of extractToolUses(ev)) {
       const name = tu.name.toLowerCase();
@@ -96,16 +89,13 @@ function usedBrowserMcp(events: Array<Record<string, unknown>>): boolean {
   return false;
 }
 
-function usedBannedHttpClient(events: Array<Record<string, unknown>>): string[] {
-  const hits = new Set<string>();
+function usedBannedHttpClient(events) {
+  const hits = new Set();
   for (const ev of events) {
     for (const tu of extractToolUses(ev)) {
       const name = tu.name.toLowerCase();
       if (name === 'bash' || name === 'shell' || name.includes('terminal') || name === 'exec') {
-        const cmd =
-          tu.input && typeof tu.input === 'object'
-            ? String((tu.input as Record<string, unknown>)['command'] ?? '')
-            : '';
+        const cmd = tu.input && typeof tu.input === 'object' ? String(tu.input.command ?? '') : '';
         if (/\b(curl|wget|httpie|http\b)/i.test(cmd)) {
           hits.add(`${name}: ${cmd.slice(0, 100)}`);
         }
@@ -115,32 +105,20 @@ function usedBannedHttpClient(events: Array<Record<string, unknown>>): string[] 
   return [...hits];
 }
 
-interface BrowserFlags {
-  url?: string | undefined;
-  description: string;
-  model?: string | undefined;
-  background: boolean;
-  fresh: boolean;
-  force: boolean;
-  noGitCheck: boolean;
-  skipMcpCheck: boolean;
-  timeout: number;
-}
-
-function looksLikeUrl(token: string): boolean {
+function looksLikeUrl(token) {
   return (
     /^https?:\/\//i.test(token) || /^localhost(:\d+)?(\/|$)/i.test(token) || /^\/\//.test(token)
   );
 }
 
-function normaliseUrl(raw: string): string {
+function normaliseUrl(raw) {
   if (/^https?:\/\//i.test(raw)) return raw;
   if (/^\/\//.test(raw)) return `http:${raw}`;
   if (/^localhost(:\d+)?/i.test(raw)) return `http://${raw}`;
   return raw;
 }
 
-function parseFlags(argv: string[]): BrowserFlags {
+function parseFlags(argv) {
   const { positional, flags } = parseArgv(argv, BOOLEAN_FLAGS);
   const background = Boolean(flags['background']);
   const fresh = Boolean(flags['fresh']);
@@ -158,10 +136,9 @@ function parseFlags(argv: string[]): BrowserFlags {
   const timeoutRaw = flags['timeout'];
   const timeout =
     typeof timeoutRaw === 'number' ? timeoutRaw : timeoutRaw ? Number(timeoutRaw) : 1800;
-  const model = typeof flags['model'] === 'string' ? (flags['model'] as string) : undefined;
-
-  let url: string | undefined;
-  let descTokens: string[] = [];
+  const model = typeof flags['model'] === 'string' ? flags['model'] : undefined;
+  let url;
+  let descTokens = [];
   if (positional.length > 0 && positional[0] && looksLikeUrl(positional[0])) {
     url = normaliseUrl(positional[0]);
     descTokens = positional.slice(1);
@@ -169,7 +146,6 @@ function parseFlags(argv: string[]): BrowserFlags {
     descTokens = positional.slice();
   }
   const description = descTokens.join(' ').trim();
-
   return {
     url,
     description,
@@ -183,7 +159,7 @@ function parseFlags(argv: string[]): BrowserFlags {
   };
 }
 
-async function preflightMcp(): Promise<{ ok: boolean; detail: string }> {
+async function preflightMcp() {
   const mcps = await listConfiguredMcps();
   if (mcps.length === 0) {
     return {
@@ -205,21 +181,23 @@ async function preflightMcp(): Promise<{ ok: boolean; detail: string }> {
   return { ok: true, detail: match.status };
 }
 
-export async function main(rawArgv: string[]): Promise<number> {
+/**
+ * @param {string[]} rawArgv
+ * @returns {Promise<number>}
+ */
+export async function main(rawArgv) {
   const delimiterIdx = rawArgv.indexOf('--');
   const firstHalf = delimiterIdx === -1 ? [] : rawArgv.slice(0, delimiterIdx);
   const userRaw =
     delimiterIdx === -1 ? rawArgv.join(' ') : rawArgv.slice(delimiterIdx + 1).join(' ');
   const combined = [...firstHalf, ...collapseArguments(userRaw)];
   const flags = parseFlags(combined);
-
   if (flags.description.length === 0) {
     process.stderr.write(
       'Error: no test description. Usage: `/cursor:browser [<url>] <what to verify...>`. URL is optional — if omitted, Cursor discovers it from `list_pages` / package.json / common ports. Examples: `/cursor:browser http://localhost:3000 "login flow works"` or `/cursor:browser "check the home page loads without console errors"`.\n',
     );
     return 2;
   }
-
   const inGit = await isGitRepo(process.cwd());
   if (!inGit && !flags.noGitCheck) {
     process.stderr.write(
@@ -242,7 +220,7 @@ export async function main(rawArgv: string[]): Promise<number> {
 
   const model = resolveModel(flags.model);
   const prompt = buildBrowserPrompt(flags.url, flags.description);
-  const jobId = nanoid(10);
+  const jobId = newId(10);
   const logPath = rawLogPathFor(root, jobId);
   ensureDir(jobsDir(root));
   ensureDir(logsDir(root));
@@ -269,7 +247,7 @@ export async function main(rawArgv: string[]): Promise<number> {
     timeoutSec: flags.timeout,
     logPath,
     onEvent: (ev) => {
-      for (const tu of extractToolUses(ev as unknown)) {
+      for (const tu of extractToolUses(ev)) {
         toolCalls += 1;
         if (toolCalls <= 30) {
           const short = tu.name.replace(/^mcp_chrome-devtools_/, 'cdt:');
@@ -283,13 +261,12 @@ export async function main(rawArgv: string[]): Promise<number> {
 
   const summary = summariseEvents(result.events);
   const chatId = extractChatId(result.events);
-  const eventsAsRec = result.events as unknown as Array<Record<string, unknown>>;
-  const mcpUsed = usedBrowserMcp(eventsAsRec);
-  const httpFallbacks = usedBannedHttpClient(eventsAsRec);
+  const mcpUsed = usedBrowserMcp(result.events);
+  const httpFallbacks = usedBannedHttpClient(result.events);
   const hadBrowserTools = toolCalls > 0;
 
-  let status: 'done' | 'failed' = result.exitCode === 0 && summary.success ? 'done' : 'failed';
-  const warnings: string[] = [];
+  let status = result.exitCode === 0 && summary.success ? 'done' : 'failed';
+  const warnings = [];
 
   if (!mcpUsed && hadBrowserTools) {
     status = 'failed';
@@ -337,19 +314,11 @@ export async function main(rawArgv: string[]): Promise<number> {
     );
   }
   process.stdout.write(`\nRun \`/cursor:status ${jobId}\` for the full record.\n`);
-  // Always return Cursor's own exit code. A post-flight warning is metadata —
-  // the report itself is what the user wants to see, so we never flip a
-  // successful shell exit into a failure just because the check is advisory.
   return result.exitCode;
 }
 
-const invokedAsScript = (() => {
-  try {
-    return process.argv[1] === fileURLToPath(import.meta.url);
-  } catch {
-    return false;
-  }
-})();
+import { invokedAsScript as __isScript } from './lib/invoked.mjs';
+const invokedAsScript = __isScript(import.meta.url);
 
 if (invokedAsScript) {
   main(process.argv.slice(2))

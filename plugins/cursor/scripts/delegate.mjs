@@ -2,36 +2,22 @@
 import { spawn } from 'node:child_process';
 import { openSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { nanoid } from 'nanoid';
-import { collapseArguments, parseArgv } from './lib/argv.js';
-import { resolveModel, runHeadless } from './lib/cursor.js';
-import { isGitRepo, repoRoot } from './lib/git.js';
+import { collapseArguments, parseArgv } from './lib/args.mjs';
+import { resolveModel, runHeadless } from './lib/cursor.mjs';
+import { isGitRepo, repoRoot } from './lib/git.mjs';
+import { id as newId } from './lib/id.mjs';
 import {
   createJob,
   pruneOlderThanDays,
   rawLogPath as rawLogPathFor,
   updateJob,
-} from './lib/jobs.js';
-import { ensureDir, jobsDir, logsDir } from './lib/paths.js';
-import { extractChatId, summariseEvents } from './lib/parse.js';
+} from './lib/jobs.mjs';
+import { ensureDir, jobsDir, logsDir } from './lib/paths.mjs';
+import { extractChatId, summariseEvents } from './lib/parse.mjs';
 
 const BOOLEAN_FLAGS = ['background', 'wait', 'fresh', 'force', 'cloud', 'git-check', 'help'];
 
-interface DelegateFlags {
-  positional: string[];
-  model?: string | undefined;
-  background: boolean;
-  wait: boolean;
-  fresh: boolean;
-  resume?: string | boolean | undefined;
-  force: boolean;
-  cloud: boolean;
-  timeout: number;
-  noGitCheck: boolean;
-  worker?: string | undefined;
-}
-
-function parseFlags(argv: string[]): DelegateFlags {
+function parseFlags(argv) {
   const { positional, flags } = parseArgv(argv, BOOLEAN_FLAGS);
   const background = Boolean(flags['background']);
   const fresh = Boolean(flags['fresh']);
@@ -47,9 +33,9 @@ function parseFlags(argv: string[]): DelegateFlags {
   const timeoutRaw = flags['timeout'];
   const timeout =
     typeof timeoutRaw === 'number' ? timeoutRaw : timeoutRaw ? Number(timeoutRaw) : 1800;
-  const resume = flags['resume'] as string | boolean | undefined;
-  const model = typeof flags['model'] === 'string' ? (flags['model'] as string) : undefined;
-  const worker = typeof flags['worker'] === 'string' ? (flags['worker'] as string) : undefined;
+  const resume = flags['resume'];
+  const model = typeof flags['model'] === 'string' ? flags['model'] : undefined;
+  const worker = typeof flags['worker'] === 'string' ? flags['worker'] : undefined;
   return {
     positional,
     model,
@@ -65,14 +51,14 @@ function parseFlags(argv: string[]): DelegateFlags {
   };
 }
 
-function isResumeRequested(resume: string | boolean | undefined, fresh: boolean): boolean {
+function isResumeRequested(resume, fresh) {
   if (fresh) return false;
   if (resume === undefined) return false;
   if (typeof resume === 'boolean') return resume;
   return resume.trim().length >= 0;
 }
 
-function resumeChatId(resume: string | boolean | undefined): string | undefined {
+function resumeChatId(resume) {
   if (
     typeof resume === 'string' &&
     resume.trim().length > 0 &&
@@ -83,12 +69,7 @@ function resumeChatId(resume: string | boolean | undefined): string | undefined 
   return undefined;
 }
 
-async function foreground(
-  flags: DelegateFlags,
-  prompt: string,
-  jobId: string,
-  root: string,
-): Promise<number> {
+async function foreground(flags, prompt, jobId, root) {
   const model = resolveModel(flags.model);
   const logPath = rawLogPathFor(root, jobId);
   ensureDir(jobsDir(root));
@@ -118,13 +99,13 @@ async function foreground(
     timeoutSec: flags.timeout,
     logPath,
     onEvent: (ev) => {
-      const type = ev['type'];
+      const type = ev.type;
       if (type === 'tool_use' || type === 'tool_call' || type === 'tool') {
         toolCalls += 1;
         if (toolCalls <= 20) {
           const name =
-            (typeof ev['name'] === 'string' && ev['name']) ||
-            (typeof ev['tool_name'] === 'string' && ev['tool_name']) ||
+            (typeof ev.name === 'string' && ev.name) ||
+            (typeof ev.tool_name === 'string' && ev.tool_name) ||
             'tool';
           process.stdout.write(`• ${String(name)}\n`);
         } else if (toolCalls === 21) {
@@ -166,7 +147,7 @@ async function foreground(
   return result.exitCode;
 }
 
-function spawnBackground(jobId: string, argv: string[]): number {
+function spawnBackground(jobId, argv) {
   const selfPath = fileURLToPath(import.meta.url);
   const logPath = rawLogPathFor(process.cwd(), jobId);
   ensureDir(logsDir(process.cwd()));
@@ -181,7 +162,7 @@ function spawnBackground(jobId: string, argv: string[]): number {
   return child.pid ?? -1;
 }
 
-async function runWorker(jobId: string, flags: DelegateFlags, prompt: string, root: string) {
+async function runWorker(jobId, flags, prompt, root) {
   const model = resolveModel(flags.model);
   const logPath = rawLogPathFor(root, jobId);
   updateJob(root, jobId, { pid: process.pid, model });
@@ -197,12 +178,12 @@ async function runWorker(jobId: string, flags: DelegateFlags, prompt: string, ro
     timeoutSec: flags.timeout,
     logPath,
     onEvent: (ev) => {
-      const chatId = ev['chat_id'] ?? ev['chatId'] ?? ev['session_id'] ?? ev['sessionId'];
+      const chatId = ev.chat_id ?? ev.chatId ?? ev.session_id ?? ev.sessionId;
       if (typeof chatId === 'string' && chatId.length > 0) {
         try {
           updateJob(root, jobId, { cursorChatId: chatId });
         } catch {
-          /* noop */
+          // noop
         }
       }
     },
@@ -220,7 +201,11 @@ async function runWorker(jobId: string, flags: DelegateFlags, prompt: string, ro
   });
 }
 
-export async function main(rawArgv: string[]): Promise<number> {
+/**
+ * @param {string[]} rawArgv
+ * @returns {Promise<number>}
+ */
+export async function main(rawArgv) {
   const delimiterIdx = rawArgv.indexOf('--');
   const firstHalf = delimiterIdx === -1 ? [] : rawArgv.slice(0, delimiterIdx);
   const userRaw =
@@ -253,7 +238,7 @@ export async function main(rawArgv: string[]): Promise<number> {
 
   pruneOlderThanDays(root, 30);
 
-  const jobId = nanoid(10);
+  const jobId = newId(10);
 
   if (flags.background) {
     const model = resolveModel(flags.model);
@@ -265,7 +250,7 @@ export async function main(rawArgv: string[]): Promise<number> {
       background: true,
       cloud: flags.cloud,
     });
-    const forwardedArgs: string[] = [];
+    const forwardedArgs = [];
     if (flags.model) forwardedArgs.push('--model', flags.model);
     if (flags.fresh) forwardedArgs.push('--fresh');
     if (flags.cloud) forwardedArgs.push('--cloud');
@@ -278,10 +263,8 @@ export async function main(rawArgv: string[]): Promise<number> {
     }
     if (!flags.force) forwardedArgs.push('--no-force');
     forwardedArgs.push('--timeout', String(flags.timeout));
-    if (prompt) {
-      forwardedArgs.push('--', prompt);
-    }
-    const pid = spawnBackground(jobId, [...forwardedArgs]);
+    if (prompt) forwardedArgs.push('--', prompt);
+    const pid = spawnBackground(jobId, forwardedArgs);
     updateJob(root, jobId, { pid });
     process.stdout.write(
       `Job \`${jobId}\` started in background (model \`${model}\`, pid ${pid}).\n`,
@@ -293,13 +276,8 @@ export async function main(rawArgv: string[]): Promise<number> {
   return foreground(flags, prompt || '(resume)', jobId, root);
 }
 
-const invokedAsScript = (() => {
-  try {
-    return process.argv[1] === fileURLToPath(import.meta.url);
-  } catch {
-    return false;
-  }
-})();
+import { invokedAsScript as __isScript } from './lib/invoked.mjs';
+const invokedAsScript = __isScript(import.meta.url);
 
 if (invokedAsScript) {
   main(process.argv.slice(2))

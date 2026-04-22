@@ -8,58 +8,72 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { join } from 'node:path';
-import { z } from 'zod';
-import { ensureDir, jobsDir, logsDir } from './paths.js';
+import { ensureDir, jobsDir, logsDir } from './paths.mjs';
 
-export const JobStatus = z.enum(['running', 'done', 'failed', 'cancelled']);
-export type JobStatus = z.infer<typeof JobStatus>;
+/**
+ * @typedef {'running'|'done'|'failed'|'cancelled'} JobStatus
+ */
 
-export const JobRecord = z.object({
-  id: z.string().min(1),
-  repoPath: z.string(),
-  prompt: z.string(),
-  model: z.string(),
-  cursorChatId: z.string().optional(),
-  pid: z.number().int().positive().optional(),
-  status: JobStatus,
-  exitCode: z.number().int().optional(),
-  startedAt: z.string(),
-  finishedAt: z.string().optional(),
-  rawLogPath: z.string(),
-  summary: z.string().optional(),
-  filesTouched: z.array(z.string()).optional(),
-  background: z.boolean().optional(),
-  cloud: z.boolean().optional(),
-});
-export type JobRecord = z.infer<typeof JobRecord>;
+/**
+ * @typedef {Object} JobRecord
+ * @property {string} id
+ * @property {string} repoPath
+ * @property {string} prompt
+ * @property {string} model
+ * @property {string=} cursorChatId
+ * @property {number=} pid
+ * @property {JobStatus} status
+ * @property {number=} exitCode
+ * @property {string} startedAt
+ * @property {string=} finishedAt
+ * @property {string} rawLogPath
+ * @property {string=} summary
+ * @property {string[]=} filesTouched
+ * @property {boolean=} background
+ * @property {boolean=} cloud
+ */
 
-export interface CreateJobInit {
-  id: string;
-  repoPath: string;
-  prompt: string;
-  model: string;
-  background?: boolean;
-  cloud?: boolean;
-}
+/**
+ * @typedef {Object} CreateJobInit
+ * @property {string} id
+ * @property {string} repoPath
+ * @property {string} prompt
+ * @property {string} model
+ * @property {boolean=} background
+ * @property {boolean=} cloud
+ */
 
-export function jobFilePath(repoPath: string, id: string): string {
+/**
+ * @param {string} repoPath
+ * @param {string} id
+ */
+export function jobFilePath(repoPath, id) {
   return join(jobsDir(repoPath), `${id}.json`);
 }
 
-export function rawLogPath(repoPath: string, id: string): string {
+/**
+ * @param {string} repoPath
+ * @param {string} id
+ */
+export function rawLogPath(repoPath, id) {
   return join(logsDir(repoPath), `${id}.ndjson`);
 }
 
-function atomicWrite(target: string, data: string): void {
+function atomicWrite(target, data) {
   const tmp = `${target}.tmp-${process.pid}-${Date.now()}`;
   writeFileSync(tmp, data, 'utf8');
   renameSync(tmp, target);
 }
 
-export function createJob(init: CreateJobInit): JobRecord {
+/**
+ * @param {CreateJobInit} init
+ * @returns {JobRecord}
+ */
+export function createJob(init) {
   ensureDir(jobsDir(init.repoPath));
   ensureDir(logsDir(init.repoPath));
-  const record: JobRecord = {
+  /** @type {JobRecord} */
+  const record = {
     id: init.id,
     repoPath: init.repoPath,
     prompt: init.prompt,
@@ -74,39 +88,61 @@ export function createJob(init: CreateJobInit): JobRecord {
   return record;
 }
 
-export function readJob(repoPath: string, id: string): JobRecord | null {
+/**
+ * @param {string} repoPath
+ * @param {string} id
+ * @returns {JobRecord|null}
+ */
+export function readJob(repoPath, id) {
   const file = jobFilePath(repoPath, id);
   if (!existsSync(file)) return null;
-  const raw = readFileSync(file, 'utf8');
-  return JobRecord.parse(JSON.parse(raw));
+  try {
+    const raw = readFileSync(file, 'utf8');
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object' && typeof parsed.id === 'string') return parsed;
+    return null;
+  } catch {
+    return null;
+  }
 }
 
-export function updateJob(
-  repoPath: string,
-  id: string,
-  patch: Partial<JobRecord>,
-): JobRecord | null {
+/**
+ * @param {string} repoPath
+ * @param {string} id
+ * @param {Partial<JobRecord>} patch
+ * @returns {JobRecord|null}
+ */
+export function updateJob(repoPath, id, patch) {
   const existing = readJob(repoPath, id);
   if (!existing) return null;
-  const merged: JobRecord = JobRecord.parse({ ...existing, ...patch });
+  const merged = { ...existing, ...patch };
   atomicWrite(jobFilePath(repoPath, id), JSON.stringify(merged, null, 2));
   return merged;
 }
 
-export interface ListOpts {
-  limit?: number;
-  status?: JobStatus;
-}
+/**
+ * @typedef {Object} ListOpts
+ * @property {number=} limit
+ * @property {JobStatus=} status
+ */
 
-export function listJobs(repoPath: string, opts: ListOpts = {}): JobRecord[] {
+/**
+ * @param {string} repoPath
+ * @param {ListOpts} [opts]
+ * @returns {JobRecord[]}
+ */
+export function listJobs(repoPath, opts = {}) {
   const dir = jobsDir(repoPath);
   if (!existsSync(dir)) return [];
   const files = readdirSync(dir).filter((f) => f.endsWith('.json') && !f.endsWith('.tmp'));
-  const records: JobRecord[] = [];
+  /** @type {JobRecord[]} */
+  const records = [];
   for (const f of files) {
     try {
       const raw = readFileSync(join(dir, f), 'utf8');
-      records.push(JobRecord.parse(JSON.parse(raw)));
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object' && typeof parsed.id === 'string')
+        records.push(parsed);
     } catch {
       continue;
     }
@@ -116,7 +152,12 @@ export function listJobs(repoPath: string, opts: ListOpts = {}): JobRecord[] {
   return typeof opts.limit === 'number' ? filtered.slice(0, opts.limit) : filtered;
 }
 
-export function pruneOlderThanDays(repoPath: string, days = 30): number {
+/**
+ * @param {string} repoPath
+ * @param {number} [days]
+ * @returns {number}
+ */
+export function pruneOlderThanDays(repoPath, days = 30) {
   const dir = jobsDir(repoPath);
   if (!existsSync(dir)) return 0;
   const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
@@ -139,9 +180,7 @@ export function pruneOlderThanDays(repoPath: string, days = 30): number {
       const p = join(lDir, f);
       try {
         const st = statSync(p);
-        if (st.isFile() && st.mtimeMs < cutoff) {
-          unlinkSync(p);
-        }
+        if (st.isFile() && st.mtimeMs < cutoff) unlinkSync(p);
       } catch {
         continue;
       }
@@ -150,7 +189,7 @@ export function pruneOlderThanDays(repoPath: string, days = 30): number {
   return removed;
 }
 
-function isProcessAlive(pid: number): boolean {
+function isProcessAlive(pid) {
   try {
     process.kill(pid, 0);
     return true;
@@ -159,11 +198,13 @@ function isProcessAlive(pid: number): boolean {
   }
 }
 
-export async function cancelJob(
-  repoPath: string,
-  id: string,
-  graceMs = 5_000,
-): Promise<JobRecord | null> {
+/**
+ * @param {string} repoPath
+ * @param {string} id
+ * @param {number} [graceMs]
+ * @returns {Promise<JobRecord|null>}
+ */
+export async function cancelJob(repoPath, id, graceMs = 5_000) {
   const job = readJob(repoPath, id);
   if (!job) return null;
   if (job.status !== 'running') return job;
@@ -171,7 +212,7 @@ export async function cancelJob(
     try {
       process.kill(job.pid, 'SIGTERM');
     } catch {
-      // ignore; process may have exited
+      // ignore — may have exited
     }
     const deadline = Date.now() + graceMs;
     while (Date.now() < deadline && isProcessAlive(job.pid)) {
@@ -191,11 +232,19 @@ export async function cancelJob(
   });
 }
 
-export function findRunningJobs(repoPath: string): JobRecord[] {
+/**
+ * @param {string} repoPath
+ * @returns {JobRecord[]}
+ */
+export function findRunningJobs(repoPath) {
   return listJobs(repoPath).filter((j) => j.status === 'running');
 }
 
-export function mostRecentFinishedJob(repoPath: string): JobRecord | null {
+/**
+ * @param {string} repoPath
+ * @returns {JobRecord|null}
+ */
+export function mostRecentFinishedJob(repoPath) {
   const jobs = listJobs(repoPath).filter((j) => j.status !== 'running');
   return jobs[0] ?? null;
 }

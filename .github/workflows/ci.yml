@@ -15,6 +15,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest]
         node: ['18.18', '20', '22']
+
     defaults:
       run:
         working-directory: plugins/cursor
@@ -29,9 +30,6 @@ jobs:
           cache-dependency-path: plugins/cursor/package-lock.json
 
       - run: npm ci
-
-      - name: Typecheck
-        run: npm run typecheck
 
       - name: Test
         run: npm test

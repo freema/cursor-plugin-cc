@@ -1,10 +1,9 @@
 #!/usr/bin/env node
-import { fileURLToPath } from 'node:url';
-import { collapseArguments, parseArgv } from './lib/argv.js';
-import { repoRoot } from './lib/git.js';
-import { listJobs, readJob, type JobRecord } from './lib/jobs.js';
+import { collapseArguments, parseArgv } from './lib/args.mjs';
+import { repoRoot } from './lib/git.mjs';
+import { listJobs, readJob } from './lib/jobs.mjs';
 
-function age(iso: string): string {
+function age(iso) {
   const ms = Date.now() - new Date(iso).getTime();
   if (!Number.isFinite(ms) || ms < 0) return '?';
   const s = Math.floor(ms / 1000);
@@ -16,12 +15,12 @@ function age(iso: string): string {
   return `${Math.floor(h / 24)}d`;
 }
 
-function truncate(s: string, n: number): string {
+function truncate(s, n) {
   const clean = s.replace(/\s+/g, ' ').trim();
   return clean.length > n ? `${clean.slice(0, n - 1)}…` : clean;
 }
 
-function renderTable(rows: JobRecord[]): string {
+function renderTable(rows) {
   if (rows.length === 0) return 'No Cursor jobs tracked for this repository yet.\n';
   const header = '| ID | Status | Model | Age | Prompt |';
   const sep = '| --- | --- | --- | --- | --- |';
@@ -37,8 +36,8 @@ function renderTable(rows: JobRecord[]): string {
   return `${header}\n${sep}\n${body}\n`;
 }
 
-function renderDetail(r: JobRecord): string {
-  const lines: string[] = [];
+function renderDetail(r) {
+  const lines = [];
   lines.push(`### Job \`${r.id}\``);
   lines.push('');
   lines.push(`- **Status:** ${r.status}`);
@@ -71,7 +70,11 @@ function renderDetail(r: JobRecord): string {
   return lines.join('\n') + '\n';
 }
 
-export async function main(rawArgv: string[]): Promise<number> {
+/**
+ * @param {string[]} rawArgv
+ * @returns {Promise<number>}
+ */
+export async function main(rawArgv) {
   const delimiterIdx = rawArgv.indexOf('--');
   const firstHalf = delimiterIdx === -1 ? [] : rawArgv.slice(0, delimiterIdx);
   const userRaw =
@@ -80,7 +83,6 @@ export async function main(rawArgv: string[]): Promise<number> {
   const { positional, flags } = parseArgv(combined, ['all']);
   const root = await repoRoot(process.cwd());
   const id = positional[0];
-
   if (id) {
     const job = readJob(root, id);
     if (!job) {
@@ -90,22 +92,16 @@ export async function main(rawArgv: string[]): Promise<number> {
     process.stdout.write(renderDetail(job));
     return 0;
   }
-
   const limit = flags['all'] ? undefined : 10;
-  const listOpts: { limit?: number } = {};
+  const listOpts = {};
   if (typeof limit === 'number') listOpts.limit = limit;
   const rows = listJobs(root, listOpts);
   process.stdout.write(renderTable(rows));
   return 0;
 }
 
-const invokedAsScript = (() => {
-  try {
-    return process.argv[1] === fileURLToPath(import.meta.url);
-  } catch {
-    return false;
-  }
-})();
+import { invokedAsScript as __isScript } from './lib/invoked.mjs';
+const invokedAsScript = __isScript(import.meta.url);
 
 if (invokedAsScript) {
   main(process.argv.slice(2))

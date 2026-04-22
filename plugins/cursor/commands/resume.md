@@ -4,6 +4,6 @@ argument-hint: '[--resume=chat-id] [--model <id>] [--background] [follow-up task
 allowed-tools: Bash(node:*)
 ---
 
-!`node "${CLAUDE_PLUGIN_ROOT}/dist/resume.js" -- "$ARGUMENTS"`
+!`node "${CLAUDE_PLUGIN_ROOT}/scripts/resume.mjs" -- "$ARGUMENTS"`
 
 Treat the output identically to `/cursor:delegate` — it is the same pipeline, just with `--resume` injected.

@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { buildArgs, resolveModel, runHeadless } from '../scripts/lib/cursor.js';
-import { extractChatId, summariseEvents } from '../scripts/lib/parse.js';
-import { HAPPY_FIXTURE, STUB_BIN, makeTempHome } from './helpers.js';
+import { buildArgs, resolveModel, runHeadless } from '../scripts/lib/cursor.mjs';
+import { extractChatId, summariseEvents } from '../scripts/lib/parse.mjs';
+import { HAPPY_FIXTURE, STUB_BIN, makeTempHome } from './helpers.mjs';
 
 describe('buildArgs', () => {
   it('includes the expected flags by default', () => {
@@ -66,7 +66,7 @@ describe('resolveModel', () => {
 });
 
 describe('runHeadless against stub binary', () => {
-  let tmp: ReturnType<typeof makeTempHome>;
+  let tmp;
   const prevBin = process.env.CURSOR_AGENT_BIN;
   const prevFixture = process.env.CURSOR_AGENT_STUB_FIXTURE;
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { collapseArguments, parseArgv, splitArgString } from '../scripts/lib/argv.js';
+import { collapseArguments, parseArgv, splitArgString } from '../scripts/lib/args.mjs';
 
 describe('splitArgString', () => {
   it('splits on whitespace', () => {
@@ -32,9 +32,33 @@ describe('parseArgv', () => {
     expect(r.positional).toEqual(['do', 'thing']);
   });
 
-  it('handles --no-* negation', () => {
-    const r = parseArgv(['--no-force'], ['force']);
-    expect(r.flags['force']).toBe(false);
+  it('handles --no-* negation, populating both kebab and camel', () => {
+    const r = parseArgv(['--no-git-check'], ['git-check']);
+    expect(r.flags['git-check']).toBe(false);
+    expect(r.flags['gitCheck']).toBe(false);
+  });
+
+  it('auto-casts numeric flag values', () => {
+    const r = parseArgv(['--timeout', '60'], []);
+    expect(r.flags['timeout']).toBe(60);
+  });
+
+  it('handles --foo=value form', () => {
+    const r = parseArgv(['--resume=chat_abc', '--model=opus'], []);
+    expect(r.flags['resume']).toBe('chat_abc');
+    expect(r.flags['model']).toBe('opus');
+  });
+
+  it('treats everything after -- as positional', () => {
+    const r = parseArgv(['--model', 'opus', '--', '--weird', 'arg'], []);
+    expect(r.flags['model']).toBe('opus');
+    expect(r.positional).toEqual(['--weird', 'arg']);
+  });
+
+  it('boolean flag does not consume next token', () => {
+    const r = parseArgv(['--background', 'task-text'], ['background']);
+    expect(r.flags['background']).toBe(true);
+    expect(r.positional).toEqual(['task-text']);
   });
 });
 
