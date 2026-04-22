@@ -4,7 +4,14 @@ import tsPlugin from '@typescript-eslint/eslint-plugin';
 
 export default [
   {
-    ignores: ['node_modules/**', 'dist/**', 'coverage/**', '**/*.ndjson', 'tests/fixtures/**'],
+    ignores: [
+      'node_modules/**',
+      'dist/**',
+      'coverage/**',
+      '**/*.ndjson',
+      'tests/fixtures/**',
+      'build.mjs',
+    ],
   },
   js.configs.recommended,
   {

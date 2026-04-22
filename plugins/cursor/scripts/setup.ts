@@ -18,14 +18,14 @@ function checkBuild(): { ok: boolean; detail: string } {
   if (!existsSync(dist)) {
     return {
       ok: false,
-      detail: `compiled dist/ missing — run \`cd ${pluginRoot()} && npm install\` (runs the build automatically via npm prepare).`,
+      detail: `bundled dist/ missing — re-install the plugin, or for dev work run \`cd ${pluginRoot()} && npm install && npm run build\`.`,
     };
   }
   const entry = join(dist, 'setup.js');
   if (!existsSync(entry)) {
     return { ok: false, detail: `dist/ exists but setup.js is missing — run \`npm run build\`.` };
   }
-  return { ok: true, detail: `compiled at ${dist}` };
+  return { ok: true, detail: `bundled at ${dist}` };
 }
 
 function checkJobsDir(): { ok: boolean; detail: string } {
