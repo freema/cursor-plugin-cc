@@ -1,0 +1,5 @@
+{"type":"system","subtype":"init","session_id":"chat_fail_999"}
+{"type":"assistant","message":{"text":"Attempting the task."}}
+{"type":"tool_use","name":"write","input":{"path":"src/bar.ts","content":"broken"}}
+{"type":"tool_result","tool_use_id":"1","is_error":true,"content":"permission denied"}
+{"type":"result","subtype":"error","chat_id":"chat_fail_999","is_error":true,"result":"Aborted due to error."}

@@ -1,0 +1,13 @@
+{"type":"system","subtype":"init","session_id":"chat_browser_001"}
+{"type":"assistant","message":{"text":"Opening the page and running verification."}}
+{"type":"tool_use","name":"mcp_chrome-devtools_list_pages","input":{}}
+{"type":"tool_result","tool_use_id":"1","is_error":false,"content":"[]"}
+{"type":"tool_use","name":"mcp_chrome-devtools_new_page","input":{"url":"http://localhost:3000"}}
+{"type":"tool_result","tool_use_id":"2","is_error":false,"content":"pageId=p1"}
+{"type":"tool_use","name":"mcp_chrome-devtools_take_snapshot","input":{"pageId":"p1"}}
+{"type":"tool_result","tool_use_id":"3","is_error":false,"content":"tree"}
+{"type":"tool_use","name":"mcp_chrome-devtools_list_console_messages","input":{"types":["error"]}}
+{"type":"tool_result","tool_use_id":"4","is_error":false,"content":"[]"}
+{"type":"tool_use","name":"mcp_chrome-devtools_take_screenshot","input":{"pageId":"p1"}}
+{"type":"tool_result","tool_use_id":"5","is_error":false,"content":"shot-abc.png"}
+{"type":"result","subtype":"success","chat_id":"chat_browser_001","result":"PASS. Page loaded; no console errors; screenshot saved."}

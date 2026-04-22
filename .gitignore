@@ -137,3 +137,18 @@ dist
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# cursor-plugin-cc local state
+.cursor-plugin-cc/
+
+# macOS
+.DS_Store
+
+# Test coverage
+coverage/
+
+# Plan files (workspace-local)
+.claude/plans/
+
+# Claude Code per-developer settings
+.claude/settings.local.json

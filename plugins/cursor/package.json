@@ -1,0 +1,73 @@
+{
+  "name": "cursor-plugin-cc",
+  "version": "0.1.0",
+  "description": "Use Cursor CLI from Claude Code to delegate coding tasks to Composer 2 and other Cursor models.",
+  "type": "module",
+  "license": "MIT",
+  "author": {
+    "name": "Tomas Grasl",
+    "email": "tomas.grasl@metrifyr.cloud",
+    "url": "https://www.tomasgrasl.cz/"
+  },
+  "homepage": "https://github.com/freema/cursor-plugin-cc",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/freema/cursor-plugin-cc.git"
+  },
+  "keywords": [
+    "claude-code",
+    "claude-code-plugin",
+    "cursor",
+    "cursor-cli",
+    "cursor-agent",
+    "composer-2",
+    "ai-coding",
+    "agent-delegation"
+  ],
+  "engines": {
+    "node": ">=18.18"
+  },
+  "files": [
+    "plugin.json",
+    "scripts",
+    "commands",
+    "agents"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "prepare": "npm run build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "lint": "prettier --check . && eslint .",
+    "format": "prettier --write .",
+    "delegate": "node dist/delegate.js",
+    "status": "node dist/status.js",
+    "result": "node dist/result.js",
+    "cancel": "node dist/cancel.js",
+    "resume": "node dist/resume.js",
+    "sessions": "node dist/sessions.js",
+    "setup": "node dist/setup.js",
+    "browser": "node dist/browser.js"
+  },
+  "dependencies": {
+    "execa": "^9.5.1",
+    "nanoid": "^5.0.9",
+    "yargs-parser": "^21.1.1",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.16.0",
+    "@types/node": "^22.10.1",
+    "@types/yargs-parser": "^21.0.3",
+    "@typescript-eslint/eslint-plugin": "^8.18.0",
+    "@typescript-eslint/parser": "^8.18.0",
+    "@vitest/coverage-v8": "^2.1.8",
+    "eslint": "^9.16.0",
+    "prettier": "^3.4.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

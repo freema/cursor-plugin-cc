@@ -1,0 +1,15 @@
+{
+  "name": "tomas-cursor",
+  "owner": {
+    "name": "Tomas Grasl",
+    "url": "https://www.tomasgrasl.cz/"
+  },
+  "plugins": [
+    {
+      "name": "cursor",
+      "source": "./plugins/cursor",
+      "description": "Delegate coding tasks from Claude Code to Cursor CLI (Composer 2 by default).",
+      "strict": false
+    }
+  ]
+}
