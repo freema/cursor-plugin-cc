@@ -237,6 +237,19 @@ The plugin codebase is English, but it does not impose a language policy on **yo
 
 **Resume vs fresh.** Use `--resume` (default) when the new task is the same thread of work. Use `--fresh` when the topic changed, or when the previous run went off the rails and resuming would just carry the confusion forward.
 
+## How I actually use this (the recipe I run every day)
+
+The two-phase loop above is the concept; here is the concrete workflow that falls out of it in practice, and the one I keep reaching for:
+
+1. **Plan in Claude Code and write a task file.** Describe what you want; ask Claude to draft a _task spec_ — a markdown file with **goal**, **acceptance criteria**, **files to touch**, and **how to verify** (the same five sections the `cursor-runner` subagent enforces). Save it under `tasks/<slug>.md` in the repo.
+2. **Hand the file to Cursor.** Run `/cursor:delegate @tasks/<slug>.md implement this`. The `@path` shorthand inlines the file contents into the prompt, so Cursor gets the full spec without Claude having to re-type it. Composer 2 executes — it is genuinely fast, and a precisely defined task is usually a one-shot job.
+3. **Back in Claude Code: review the diff.** Approve, or iterate with `/cursor:resume "fix X"` on the same thread, or escalate with `/cursor:delegate --model opus --fresh <same task file>` if Composer stalled.
+4. **Keep the task files around.** `tasks/` becomes a little log of what the repo's delegated changes looked like. Handy when you want to re-delegate a similar slice — just copy an old file, tweak the bullets.
+
+Why this works: Claude's tokens go into **planning and reviewing**, where thinking matters; Cursor's Composer 2 handles **the actual typing**, where it is cheaper and faster. The task file is the contract between the two phases — if it is sloppy, no model will save you. Writing a good one is itself a skill, and it is the only skill this workflow asks of you.
+
+If you want Claude to do the whole thing automatically — draft the task file AND hand it off — that is what the `cursor-runner` subagent is for. Ask it to either "draft a task file for X" (it stops there) or "implement X via Cursor" (it drafts, hands off, and reports the diff).
+
 ## Configuration
 
 | Env var                 | Purpose                                                                         |
