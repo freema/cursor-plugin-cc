@@ -1,0 +1,5 @@
+{"type":"system","subtype":"init","session_id":"chat_browser_bad"}
+{"type":"assistant","message":{"text":"MCP seems unavailable, trying curl instead."}}
+{"type":"tool_use","name":"bash","input":{"command":"curl -sS -o /dev/null -w '%{http_code}' http://localhost:3000"}}
+{"type":"tool_result","tool_use_id":"1","is_error":false,"content":"200"}
+{"type":"result","subtype":"success","chat_id":"chat_browser_bad","result":"PASS. curl got 200 OK."}

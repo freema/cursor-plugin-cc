@@ -1,0 +1,6 @@
+node_modules
+dist
+coverage
+package-lock.json
+*.ndjson
+.cursor-plugin-cc

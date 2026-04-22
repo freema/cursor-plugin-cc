@@ -1,0 +1,7 @@
+{"type":"system","subtype":"init","session_id":"chat_abc123","cwd":"/tmp/repo"}
+{"type":"assistant","message":{"text":"Starting work on the requested task."}}
+{"type":"tool_use","name":"write","input":{"path":"src/foo.ts","content":"export const foo = 42;\n"}}
+{"type":"tool_result","tool_use_id":"1","is_error":false,"content":"file written"}
+{"type":"tool_use","name":"edit","input":{"file_path":"README.md","old":"TODO","new":"done"}}
+{"type":"tool_result","tool_use_id":"2","is_error":false,"content":"ok"}
+{"type":"result","subtype":"success","chat_id":"chat_abc123","result":"Added src/foo.ts and updated README.md."}

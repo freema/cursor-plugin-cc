@@ -1,0 +1,11 @@
+{"type":"system","subtype":"init","session_id":"chat_br_nested_1"}
+{"type":"assistant","message":{"id":"msg_1","content":[{"type":"text","text":"Opening the browser and running checks."}]}}
+{"type":"assistant","message":{"id":"msg_2","content":[{"type":"tool_use","id":"tu_1","name":"mcp_chrome-devtools_list_pages","input":{}}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"tu_1","content":"[]"}]}}
+{"type":"assistant","message":{"id":"msg_3","content":[{"type":"tool_use","id":"tu_2","name":"mcp_chrome-devtools_new_page","input":{"url":"http://localhost:3002"}}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"tu_2","content":"pageId=p1"}]}}
+{"type":"assistant","message":{"id":"msg_4","content":[{"type":"tool_use","id":"tu_3","name":"mcp_chrome-devtools_take_snapshot","input":{"pageId":"p1"}}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"tu_3","content":"tree"}]}}
+{"type":"assistant","message":{"id":"msg_5","content":[{"type":"tool_use","id":"tu_4","name":"mcp_chrome-devtools_take_screenshot","input":{"pageId":"p1"}}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"tu_4","content":"shot.png"}]}}
+{"type":"result","subtype":"success","chat_id":"chat_br_nested_1","result":"PASS. Page loaded, no console errors, screenshot saved."}

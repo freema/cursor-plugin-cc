@@ -1,0 +1,12 @@
+{
+  "name": "cursor",
+  "version": "0.1.0",
+  "description": "Hand off tasks from Claude Code to cursor-agent. Composer 2 optimised.",
+  "author": {
+    "name": "Tomas Grasl",
+    "url": "https://www.tomasgrasl.cz/"
+  },
+  "homepage": "https://github.com/freema/cursor-plugin-cc",
+  "repository": "https://github.com/freema/cursor-plugin-cc",
+  "license": "MIT"
+}

@@ -1,0 +1,11 @@
+cursor-plugin-cc
+Copyright (c) 2026 Tomas Grasl
+
+Licensed under the MIT License. See LICENSE for details.
+
+This project integrates with the Cursor CLI (`cursor-agent`), which is a
+separate product of Cursor / Anysphere. The Cursor CLI is not bundled or
+redistributed here; users must install it independently from
+https://cursor.com/install.
+
+Inspired by the structure of openai/codex-plugin-cc (MIT-licensed).
