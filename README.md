@@ -323,23 +323,59 @@ This re-opens the same Cursor session without going through Claude Code — hand
 
 **`cursor-agent` hangs after finishing a task.** Known quirk of the print-mode CLI. The plugin has a 5-second watchdog that SIGTERMs the process after a `result` event if it hasn't self-exited, then SIGKILLs 5 seconds later.
 
+## Troubleshooting
+
+Things that bit users (and us) during development, with the exact fix each time.
+
+### `Unknown command: /cursor:setup`
+
+You skipped `/reload-plugins`. Claude Code only picks up newly-installed plugin commands after a reload — `/plugin install` alone is not enough. Run `/reload-plugins` and the commands appear.
+
+### `Shell command failed for pattern ... no matches found: review?`
+
+Zsh globbing on `?` or `*` in your prompt. This should not happen in `v0.2.0+` because every command wrapper quotes `"$ARGUMENTS"`. If you see it, your plugin is outdated — reinstall: `/plugin marketplace remove tomas-cursor && /plugin marketplace add freema/cursor-plugin-cc && /plugin install cursor@tomas-cursor && /reload-plugins`.
+
+### `Error: Cannot find module '.../dist/<cmd>.js'` or `'.../scripts/<cmd>.mjs'`
+
+Stale plugin cache from an older version. Same fix as above: remove marketplace, re-add, re-install, reload.
+
+### `Shell command permission check failed for pattern "!node ..."`
+
+First-time Bash permission prompt. Approve `node` for this session (Claude Code asks once per session; the approval covers all plugin commands since all of them invoke `node`). If you denied it accidentally, `/permissions` lets you review/change.
+
+### `/cursor:browser` says "The run never called the `chrome-devtools` MCP"
+
+The MCP server is not loaded in the current `cursor-agent` process. Three common causes:
+
+1. **Not approved.** Run `cursor-agent mcp enable chrome-devtools` (or use `--approve-mcps` which `/cursor:browser` already passes).
+2. **Not configured in `~/.cursor/mcp.json`.** Add the entry the error message suggests, including `--isolated` in the args to avoid Chrome profile lockouts.
+3. **Cursor not restarted after editing `mcp.json`.** Cursor caches MCP config at startup; a restart is required.
+
+Verify with `/cursor:setup --doctor` → the "Configured Cursor MCPs" section should list `chrome-devtools` with status `loaded` (or at least `approved`).
+
+### `/cursor:from-plan` says "no plan files found"
+
+Claude Code only writes plan files when you explicitly enter plan mode and then exit it with approval. If you never did that, there is nothing to convert. Enter plan mode (`/plan ...`) first; run `/cursor:from-plan --list` afterwards to confirm the file is there.
+
+### `cursor-agent` hangs mid-run
+
+Usually Cursor's backend, not us. The plugin has a default 30-minute timeout (`--timeout 1800`). For long tasks, bump it with `--timeout 3600`. For stuck jobs, `/cursor:cancel <id>` — SIGTERM with a 5 s grace window, then SIGKILL.
+
+### `/cursor:delegate` prints `Error: current directory is not a git repository`
+
+Safety check: by default the plugin refuses to run outside a git repo so Cursor cannot modify an unversioned tree. Pass `--no-git-check` if you know what you are doing.
+
+### Logs and raw output
+
+Every job writes its full `cursor-agent` NDJSON stream to `~/.cursor-plugin-cc/jobs/<repo-hash>/logs/<job-id>.ndjson`. When reporting bugs, include the first ~50 lines of the relevant log (after scrubbing anything sensitive).
+
 ## Contributing
 
 Plugin users can skip this section — there is nothing to build.
 
-For hacking on the plugin itself, clone and work inside `plugins/cursor/`:
+Contributors, read [`CONTRIBUTING.md`](./CONTRIBUTING.md) for the dev setup, branch naming, the "how to add a new slash command" recipe, and the release flow. The hard rules (zero runtime deps, no build step, etc.) live in [`AGENTS.md`](./AGENTS.md) — the same file `cursor-runner` tells Cursor to read before touching any repo. Reporting a vulnerability? See [`SECURITY.md`](./SECURITY.md).
 
-```bash
-git clone https://github.com/freema/cursor-plugin-cc
-cd cursor-plugin-cc/plugins/cursor
-npm install    # only dev deps: vitest, eslint, prettier
-npm test
-npm run lint
-```
-
-The source **is** the ship artefact — `scripts/*.mjs` files are what Claude Code executes in the user's cache. No bundler, no compile step. If you add a runtime dependency, you are on the wrong plugin. Keep the surface zero-dep: replace third-party helpers with small inline stdlib-based equivalents (see `scripts/lib/run.mjs` as the pattern — it replaced `execa`).
-
-CI runs `npm test` and `npm run lint` on every PR across Node 18.18 / 20 / 22 on Ubuntu + macOS.
+CI runs `npm test` and `npm run lint` on every PR across Node 18.18 / 20 / 22 on Ubuntu + macOS. No direct pushes to `main` — branch protection enforces PR review.
 
 ## Roadmap
 
