@@ -12,9 +12,10 @@ A [Claude Code](https://claude.com/claude-code) plugin that hands off coding tas
 
 ## What you get
 
-Eight slash commands under the `cursor:` namespace:
+Nine slash commands under the `cursor:` namespace:
 
 - **`/cursor:delegate`** — hand a coding task to Cursor, foreground or background.
+- **`/cursor:from-plan`** — turn a Claude Code plan (from plan mode) into a `tasks/<file>.md` and hand it off to Cursor.
 - **`/cursor:browser`** — verify a URL / flow in a real browser via Cursor's `chrome-devtools` MCP.
 - **`/cursor:status`** — list recent jobs or inspect a specific one.
 - **`/cursor:result`** — print the final output of a finished job.
@@ -98,6 +99,30 @@ Examples:
 /cursor:delegate --background --model auto "migrate user repository to Doctrine 3"
 /cursor:delegate --resume "continue with the failing edge case"
 ```
+
+### `/cursor:from-plan [plan-name] [--delegate] [--model <id>] [--background] [--list]`
+
+Takes a Claude Code **plan file** (anything written under `~/.claude/plans/` by Claude's plan mode) and rewrites it as a Cursor-shaped task file under `tasks/<YYYYMMDD-HHmm>-<slug>.md`. The task file has the standard five sections (Goal, Repo context, Acceptance criteria, Files to touch, How to verify) plus a guardrail block — exactly the shape the `cursor-runner` subagent enforces — and a link back to the source plan.
+
+Two modes:
+
+- **Preview + hand-back** (default): writes the task file, prints the exact `/cursor:delegate @tasks/…` command to run next. Lets you review the task before any Cursor tokens get spent.
+- **Auto-delegate** (`--delegate` / `--yes`): writes the task file AND invokes `/cursor:delegate` in one go. Use when you already trust the plan.
+
+Examples:
+
+```
+# Plan mode first — Claude drops the plan under ~/.claude/plans/<slug>.md
+# when you exit plan mode. Then:
+
+/cursor:from-plan                       # newest plan → tasks/ → print delegate command
+/cursor:from-plan dark-mode             # match on a plan name fragment
+/cursor:from-plan --delegate            # newest plan → tasks/ → delegate immediately
+/cursor:from-plan --delegate --model opus --background "some-slug"
+/cursor:from-plan --list                # show the 15 most recent plans
+```
+
+This is the closest thing to "plan in Claude, execute in Cursor" in one session: Claude does the thinking, Cursor does the typing, and the task file is a durable contract between the two.
 
 ### `/cursor:browser <url> <what to verify...>`
 
@@ -243,6 +268,26 @@ The two-phase loop above is the concept; here is the concrete workflow that fall
 Why this works: Claude's tokens go into **planning and reviewing**, where thinking matters; Cursor's Composer 2 handles **the actual typing**, where it is cheaper and faster. The task file is the contract between the two phases — if it is sloppy, no model will save you. Writing a good one is itself a skill, and it is the only skill this workflow asks of you.
 
 If you want Claude to do the whole thing automatically — draft the task file AND hand it off — that is what the `cursor-runner` subagent is for. Ask it to either "draft a task file for X" (it stops there) or "implement X via Cursor" (it drafts, hands off, and reports the diff).
+
+### Bonus: plan mode → `/cursor:from-plan` → delegate
+
+If you already used Claude Code's **plan mode** for a task (the `/plan …` flow that drops a plan file under `~/.claude/plans/<slug>.md` after you approve it), you do not need to re-type anything. Run `/cursor:from-plan` and the plugin will:
+
+1. Pick the newest plan under `~/.claude/plans/` (or the one matching a name fragment you pass).
+2. Extract the useful sections (Context → Repo context, Approach → Acceptance criteria, File list → Files to touch, Verification → How to verify), drop the dev-only bits (Effort, Risks, Scope exclusions), and add the standard guardrail block.
+3. Write the result to `tasks/<YYYYMMDD-HHmm>-<slug>.md` in the current repo and print the exact `/cursor:delegate @tasks/…` command for you to run.
+
+So the full loop is:
+
+```
+/plan add a dark-mode toggle to the settings page
+# Claude proposes a plan; you approve inside plan mode.
+/cursor:from-plan --delegate --model opus
+# Plan gets turned into a task file and handed off to Cursor in one step.
+# Back in Claude Code: review the diff, /cursor:resume "fix X" if needed.
+```
+
+The task file stays in `tasks/` as a durable record — the contract between plan and execution. Re-running a similar slice later is a two-line diff of that file away.
 
 ## Configuration
 
