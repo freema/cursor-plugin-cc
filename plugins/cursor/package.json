@@ -1,6 +1,6 @@
 {
   "name": "cursor-plugin-cc",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Use Cursor CLI from Claude Code to delegate coding tasks to Composer 2 and other Cursor models.",
   "type": "module",
   "license": "MIT",

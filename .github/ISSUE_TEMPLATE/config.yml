@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Cursor CLI issues
+    url: https://cursor.com/support
+    about: Problems with `cursor-agent` itself (auth, model availability, MCP servers) belong with Cursor, not here.
+  - name: Claude Code issues
+    url: https://github.com/anthropics/claude-code
+    about: Problems with the slash-command / plugin machinery itself (not this plugin's commands) belong upstream.

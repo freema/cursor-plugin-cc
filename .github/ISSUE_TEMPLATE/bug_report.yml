@@ -1,0 +1,97 @@
+name: Bug report
+description: Something in cursor-plugin-cc is broken.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Please fill in the boxes below — most bugs need all of them to triage.
+
+  - type: input
+    id: node-version
+    attributes:
+      label: Node version
+      description: Output of `node --version`.
+      placeholder: v20.11.0
+    validations:
+      required: true
+
+  - type: input
+    id: cursor-agent-version
+    attributes:
+      label: cursor-agent version
+      description: Output of `cursor-agent --version`. If you don't have `cursor-agent` installed, say so.
+      placeholder: 2026.04.17-479fd04
+    validations:
+      required: true
+
+  - type: input
+    id: plugin-version
+    attributes:
+      label: Plugin version
+      description: Tag or commit. From the plugin cache `cat ~/.claude/plugins/cache/tomas-cursor/cursor/*/plugin.json | grep version`.
+      placeholder: v0.2.0
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: OS
+      options:
+        - macOS
+        - Linux
+        - Windows (WSL)
+        - Windows (native)
+    validations:
+      required: true
+
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Output of `/cursor:setup --doctor`
+      description: Paste the full block. Mask the CURSOR_API_KEY if it is shown.
+      render: markdown
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Exact slash commands you ran, in order.
+      placeholder: |
+        1. `/cursor:delegate "write a haiku"`
+        2. Got this error: …
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected-vs-actual
+    attributes:
+      label: What you expected vs. what happened
+      placeholder: |
+        Expected: job completes with a summary.
+        Actual: crashed with `Cannot find module`.
+    validations:
+      required: true
+
+  - type: input
+    id: job-id
+    attributes:
+      label: Job id (if the failure was inside /cursor:delegate or /cursor:browser)
+      description: From `/cursor:status` — we'll ask for the raw log at `~/.cursor-plugin-cc/jobs/<repo-hash>/logs/<job-id>.ndjson` if needed.
+      placeholder: XUE20Qpnu2
+
+  - type: textarea
+    id: raw-log
+    attributes:
+      label: Raw log excerpt (optional)
+      description: If you can paste the first ~50 lines of the job's `.ndjson`, it saves a round-trip. Remove anything sensitive first.
+      render: json
+
+  - type: textarea
+    id: anything-else
+    attributes:
+      label: Anything else
+      description: Workarounds you tried, screenshots, environment quirks, etc.

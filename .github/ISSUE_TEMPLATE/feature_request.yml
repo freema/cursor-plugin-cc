@@ -1,0 +1,54 @@
+name: Feature request
+description: Propose a new slash command, flag, or behaviour.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before opening this, skim the [Roadmap section of the README](../blob/main/README.md#roadmap) and the existing [feature requests](https://github.com/freema/cursor-plugin-cc/issues?q=is%3Aissue+label%3Aenhancement) — your idea might already be there.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you trying to solve
+      description: Describe the friction, not a solution yet. What did you try to do, what got in the way?
+      placeholder: |
+        "I want to re-run a failed delegate with the same prompt but a different model.
+         Right now I copy the prompt from /cursor:result and re-type /cursor:delegate --model opus."
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed command / flag / behaviour
+      description: Sketch it. Name, flags, expected output. Rough is fine.
+      placeholder: |
+        /cursor:retry [job-id] [--model <id>] [--fresh]
+        Re-runs the same prompt. Defaults to the latest job if no id is given.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered
+      description: What existing commands or workflows did you rule out, and why?
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Does it fit zero-deps + no-build?
+      description: See AGENTS.md. New runtime deps are a non-starter; new build steps too.
+      options:
+        - Yes — pure stdlib inside a new .mjs
+        - Not sure — need to discuss
+        - No — requires a dependency (explain below)
+    validations:
+      required: true
+
+  - type: textarea
+    id: anything-else
+    attributes:
+      label: Anything else
+      description: Sketches, related prior art (codex-plugin-cc, etc.), willingness to submit a PR.
