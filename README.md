@@ -68,15 +68,9 @@ From GitHub once published:
 
 > ⚠️ **Do not skip `/reload-plugins`.** Right after `/plugin install` the `/cursor:*` commands are NOT yet available — Claude Code only picks them up after a plugin reload. If you see `Unknown command: /cursor:setup`, you forgot this step — run `/reload-plugins` and try again.
 
-> ⚠️ **One-time `npm install`.** The plugin ships as TypeScript and runs via `tsx` — the Claude Code plugin loader does not run `npm install` for you. Inside the plugin directory run it once:
->
-> ```bash
-> cd plugins/cursor && npm install
-> ```
->
-> (When you installed from a local path as above, the path is simply your clone's `plugins/cursor`. When installed via `/plugin marketplace add freema/cursor-plugin-cc` from GitHub, Claude Code unpacks the repo under `~/.claude/plugins/cache/<id>/` — run `npm install` inside that cache's `plugins/cursor/`.)
+The plugin ships **pre-bundled JavaScript** — Claude Code's `/plugin install` gives you everything in one step; you do not need to `npm install` or run a build. Each slash command invokes a single self-contained `node dist/<cmd>.js` with all runtime deps inlined.
 
-The first `/cursor:setup` run tells you if `cursor-agent` is missing, unauthenticated, or if `node_modules` are not yet installed.
+The first `/cursor:setup` run tells you if `cursor-agent` is missing or unauthenticated. If you are developing the plugin itself and want to run the TypeScript sources directly (not the bundled `dist/`), see [CONTRIBUTING](#contributing) below.
 
 ## Usage
 
@@ -283,6 +277,23 @@ This re-opens the same Cursor session without going through Claude Code — hand
 **The model list doesn't match what I see in Cursor.** Run `/cursor:setup --print-models` — that shells out to `cursor-agent --list-models` and shows exactly what your account supports. The alias table in the plugin is a convenience; Cursor's actual model IDs drift over time.
 
 **`cursor-agent` hangs after finishing a task.** Known quirk of the print-mode CLI. The plugin has a 5-second watchdog that SIGTERMs the process after a `result` event if it hasn't self-exited, then SIGKILLs 5 seconds later.
+
+## Contributing
+
+Pure plugin users can skip this section — everything you need ships pre-bundled.
+
+For developing the plugin itself, clone and work inside `plugins/cursor/`:
+
+```bash
+git clone https://github.com/freema/cursor-plugin-cc
+cd cursor-plugin-cc/plugins/cursor
+npm install
+npm run typecheck
+npm test
+npm run build   # re-bundles dist/ via esbuild
+```
+
+`dist/` is checked into git on purpose — it is the ship artefact, and Claude Code's plugin cache uses it directly. When you edit a script, re-run `npm run build` before committing so `dist/` stays in sync. CI verifies typecheck + tests + lint on every PR across Node 18.18 / 20 / 22 on Ubuntu + macOS.
 
 ## Roadmap
 

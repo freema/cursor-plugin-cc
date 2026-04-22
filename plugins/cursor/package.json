@@ -35,7 +35,8 @@
   ],
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "build": "node build.mjs",
+    "build:tsc": "rm -rf dist && tsc -p tsconfig.build.json",
     "prepare": "npm run build",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -64,6 +65,7 @@
     "@typescript-eslint/eslint-plugin": "^8.18.0",
     "@typescript-eslint/parser": "^8.18.0",
     "@vitest/coverage-v8": "^2.1.8",
+    "esbuild": "^0.28.0",
     "eslint": "^9.16.0",
     "prettier": "^3.4.2",
     "tsx": "^4.19.2",
