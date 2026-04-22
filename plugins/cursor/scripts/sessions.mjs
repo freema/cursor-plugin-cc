@@ -1,10 +1,9 @@
 #!/usr/bin/env node
-import { fileURLToPath } from 'node:url';
-import { listSessions } from './lib/cursor.js';
-import { repoRoot } from './lib/git.js';
-import { listJobs } from './lib/jobs.js';
+import { listSessions } from './lib/cursor.mjs';
+import { repoRoot } from './lib/git.mjs';
+import { listJobs } from './lib/jobs.mjs';
 
-export async function main(): Promise<number> {
+export async function main() {
   const root = await repoRoot(process.cwd());
   const sessions = await listSessions(root);
   if (sessions.length > 0) {
@@ -18,7 +17,6 @@ export async function main(): Promise<number> {
     process.stdout.write('\nResume any of them with `cursor-agent --resume=<id>`.\n');
     return 0;
   }
-
   process.stdout.write(
     '`cursor-agent ls` returned no sessions (or timed out). Falling back to local job registry:\n\n',
   );
@@ -38,13 +36,8 @@ export async function main(): Promise<number> {
   return 0;
 }
 
-const invokedAsScript = (() => {
-  try {
-    return process.argv[1] === fileURLToPath(import.meta.url);
-  } catch {
-    return false;
-  }
-})();
+import { invokedAsScript as __isScript } from './lib/invoked.mjs';
+const invokedAsScript = __isScript(import.meta.url);
 
 if (invokedAsScript) {
   main()

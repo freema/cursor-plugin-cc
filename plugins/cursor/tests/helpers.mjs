@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-export function makeTempHome(): { dir: string; cleanup: () => void } {
+export function makeTempHome() {
   const dir = mkdtempSync(join(tmpdir(), 'cursor-plugin-cc-test-'));
   return {
     dir,

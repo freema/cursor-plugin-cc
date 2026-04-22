@@ -1,16 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import {
-  extractChatId,
-  parseLine,
-  summariseEvents,
-  type CursorEvent,
-} from '../scripts/lib/parse.js';
-import { FAILURE_FIXTURE, HAPPY_FIXTURE } from './helpers.js';
+import { extractChatId, parseLine, summariseEvents } from '../scripts/lib/parse.mjs';
+import { FAILURE_FIXTURE, HAPPY_FIXTURE } from './helpers.mjs';
 
-function loadFixture(path: string): CursorEvent[] {
+function loadFixture(path) {
   const raw = readFileSync(path, 'utf8');
-  const out: CursorEvent[] = [];
+  const out = [];
   for (const line of raw.split('\n')) {
     const ev = parseLine(line);
     if (ev) out.push(ev);

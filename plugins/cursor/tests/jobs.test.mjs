@@ -11,11 +11,11 @@ import {
   pruneOlderThanDays,
   readJob,
   updateJob,
-} from '../scripts/lib/jobs.js';
-import { makeTempHome } from './helpers.js';
+} from '../scripts/lib/jobs.mjs';
+import { makeTempHome } from './helpers.mjs';
 
 describe('jobs registry', () => {
-  let tmp: ReturnType<typeof makeTempHome>;
+  let tmp;
   const prevHome = process.env.CURSOR_PLUGIN_CC_HOME;
   const repo = '/tmp/some-repo-path';
 
@@ -75,7 +75,7 @@ describe('jobs registry', () => {
     try {
       await new Promise((r) => setTimeout(r, 50));
       createJob({ id: 'live', repoPath: repo, prompt: 'p', model: 'm' });
-      updateJob(repo, 'live', { pid: child.pid! });
+      updateJob(repo, 'live', { pid: child.pid });
       const cancelled = await cancelJob(repo, 'live', 500);
       expect(cancelled?.status).toBe('cancelled');
     } finally {

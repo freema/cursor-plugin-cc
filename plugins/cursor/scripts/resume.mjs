@@ -1,21 +1,19 @@
 #!/usr/bin/env node
-import { fileURLToPath } from 'node:url';
-import { main as delegateMain } from './delegate.js';
+import { main as delegateMain } from './delegate.mjs';
 
-export async function main(rawArgv: string[]): Promise<number> {
+/**
+ * @param {string[]} rawArgv
+ * @returns {Promise<number>}
+ */
+export async function main(rawArgv) {
   const argv = rawArgv.slice();
   const hasResume = argv.some((a) => a === '--resume' || a.startsWith('--resume='));
   if (!hasResume) argv.unshift('--resume');
   return delegateMain(argv);
 }
 
-const invokedAsScript = (() => {
-  try {
-    return process.argv[1] === fileURLToPath(import.meta.url);
-  } catch {
-    return false;
-  }
-})();
+import { invokedAsScript as __isScript } from './lib/invoked.mjs';
+const invokedAsScript = __isScript(import.meta.url);
 
 if (invokedAsScript) {
   main(process.argv.slice(2))

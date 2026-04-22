@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { main as delegateMain } from '../scripts/delegate.js';
-import { listJobs } from '../scripts/lib/jobs.js';
-import { HAPPY_FIXTURE, STUB_BIN, makeTempHome } from './helpers.js';
+import { main as delegateMain } from '../scripts/delegate.mjs';
+import { listJobs } from '../scripts/lib/jobs.mjs';
+import { HAPPY_FIXTURE, STUB_BIN, makeTempHome } from './helpers.mjs';
 
-describe('delegate.ts foreground', () => {
-  let tmp: ReturnType<typeof makeTempHome>;
+describe('delegate foreground', () => {
+  let tmp;
   const prevHome = process.env.CURSOR_PLUGIN_CC_HOME;
   const prevBin = process.env.CURSOR_AGENT_BIN;
   const prevFix = process.env.CURSOR_AGENT_STUB_FIXTURE;
@@ -45,7 +45,7 @@ describe('delegate.ts foreground', () => {
     }
     const jobs = listJobs(tmp.dir);
     expect(jobs.length).toBe(1);
-    const job = jobs[0]!;
+    const job = jobs[0];
     expect(job.status).toBe('done');
     expect(job.model).toBe('composer-2-fast');
     expect(job.cursorChatId).toBe('chat_abc123');

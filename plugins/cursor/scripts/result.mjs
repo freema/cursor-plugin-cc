@@ -1,11 +1,10 @@
 #!/usr/bin/env node
-import { fileURLToPath } from 'node:url';
-import { collapseArguments, parseArgv } from './lib/argv.js';
-import { repoRoot } from './lib/git.js';
-import { mostRecentFinishedJob, readJob, type JobRecord } from './lib/jobs.js';
+import { collapseArguments, parseArgv } from './lib/args.mjs';
+import { repoRoot } from './lib/git.mjs';
+import { mostRecentFinishedJob, readJob } from './lib/jobs.mjs';
 
-function render(job: JobRecord): string {
-  const lines: string[] = [];
+function render(job) {
+  const lines = [];
   lines.push(`### Result of job \`${job.id}\` — ${job.status}`);
   lines.push('');
   lines.push(`**Model:** ${job.model}`);
@@ -31,7 +30,11 @@ function render(job: JobRecord): string {
   return lines.join('\n') + '\n';
 }
 
-export async function main(rawArgv: string[]): Promise<number> {
+/**
+ * @param {string[]} rawArgv
+ * @returns {Promise<number>}
+ */
+export async function main(rawArgv) {
   const delimiterIdx = rawArgv.indexOf('--');
   const firstHalf = delimiterIdx === -1 ? [] : rawArgv.slice(0, delimiterIdx);
   const userRaw =
@@ -40,7 +43,6 @@ export async function main(rawArgv: string[]): Promise<number> {
   const { positional } = parseArgv(combined);
   const root = await repoRoot(process.cwd());
   const id = positional[0];
-
   const job = id ? readJob(root, id) : mostRecentFinishedJob(root);
   if (!job) {
     process.stderr.write(
@@ -60,13 +62,8 @@ export async function main(rawArgv: string[]): Promise<number> {
   return 0;
 }
 
-const invokedAsScript = (() => {
-  try {
-    return process.argv[1] === fileURLToPath(import.meta.url);
-  } catch {
-    return false;
-  }
-})();
+import { invokedAsScript as __isScript } from './lib/invoked.mjs';
+const invokedAsScript = __isScript(import.meta.url);
 
 if (invokedAsScript) {
   main(process.argv.slice(2))

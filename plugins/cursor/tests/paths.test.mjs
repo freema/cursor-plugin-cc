@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { pluginHome, repoHash, jobsDir } from '../scripts/lib/paths.js';
-import { makeTempHome } from './helpers.js';
+import { pluginHome, repoHash, jobsDir } from '../scripts/lib/paths.mjs';
+import { makeTempHome } from './helpers.mjs';
 
 describe('paths', () => {
-  let tmp: ReturnType<typeof makeTempHome>;
+  let tmp;
   const prevHome = process.env.CURSOR_PLUGIN_CC_HOME;
 
   beforeEach(() => {

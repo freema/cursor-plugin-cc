@@ -1,14 +1,13 @@
-import { spawn, type ChildProcess } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { createWriteStream } from 'node:fs';
 import { createInterface } from 'node:readline';
-import { execa } from 'execa';
-import { parseLine, type CursorEvent } from './parse.js';
+import { parseLine } from './parse.mjs';
+import { run } from './run.mjs';
 
-// Aliases map convenience names to concrete Cursor model ids as returned by
-// `cursor-agent --list-models`. Cursor rotates these over time — run
-// `/cursor:setup --print-models` to see the live list for your account.
-export const MODEL_ALIASES: Record<string, string> = {
-  // Composer (Cursor's own fast executor — default)
+// Convenience aliases that map shortcuts to real Cursor model ids. Cursor
+// rotates these over time — `/cursor:setup --print-models` shows the live
+// list for the current account. Unknown ids are passed through verbatim.
+export const MODEL_ALIASES = {
   composer: 'composer-2-fast',
   'composer-fast': 'composer-2-fast',
   fast: 'composer-2-fast',
@@ -16,22 +15,18 @@ export const MODEL_ALIASES: Record<string, string> = {
   'composer-2': 'composer-2',
   'composer-full': 'composer-2',
   'composer-1.5': 'composer-1.5',
-  // Auto-routing
   auto: 'auto',
-  // Claude Sonnet
   sonnet: 'claude-4.6-sonnet-medium',
   'sonnet-4.6': 'claude-4.6-sonnet-medium',
   'sonnet-4.6-thinking': 'claude-4.6-sonnet-medium-thinking',
   'sonnet-4.5': 'claude-4.5-sonnet',
   'sonnet-4.5-thinking': 'claude-4.5-sonnet-thinking',
   'sonnet-4': 'claude-4-sonnet',
-  // Claude Opus
   opus: 'claude-opus-4-7-high',
   'opus-4.7': 'claude-opus-4-7-high',
   'opus-4.7-max': 'claude-opus-4-7-max',
   'opus-4.7-thinking': 'claude-opus-4-7-thinking-high',
   'opus-4.6': 'claude-4.6-opus-high',
-  // OpenAI Codex / GPT
   gpt: 'gpt-5.3-codex',
   codex: 'gpt-5.3-codex',
   'gpt-5.3-codex': 'gpt-5.3-codex',
@@ -39,7 +34,6 @@ export const MODEL_ALIASES: Record<string, string> = {
   'gpt-5.3-codex-high': 'gpt-5.3-codex-high',
   'gpt-5.2-codex': 'gpt-5.2-codex',
   'gpt-5.2': 'gpt-5.2',
-  // Others
   grok: 'grok-4-20',
   'grok-thinking': 'grok-4-20-thinking',
   gemini: 'gemini-3.1-pro',
@@ -47,20 +41,25 @@ export const MODEL_ALIASES: Record<string, string> = {
   'gemini-flash': 'gemini-3-flash',
 };
 
-// Cursor's own default is `composer-2-fast` (marked "(current, default)" by
-// `cursor-agent --list-models`). It is the fastest Composer variant — the
-// right choice for the delegate-and-move-on flow this plugin optimises for.
 export const DEFAULT_MODEL = 'composer-2-fast';
 
-export function resolveModel(input: string | undefined): string {
+/**
+ * @param {string|undefined} input
+ * @returns {string}
+ */
+export function resolveModel(input) {
   if (!input || input.trim() === '') return DEFAULT_MODEL;
   const key = input.trim().toLowerCase();
   return MODEL_ALIASES[key] ?? input.trim();
 }
 
-let cachedBin: string | null = null;
+/** @type {string|null} */
+let cachedBin = null;
 
-export async function resolveBin(): Promise<string> {
+/**
+ * @returns {Promise<string>}
+ */
+export async function resolveBin() {
   if (cachedBin) return cachedBin;
   const override = process.env.CURSOR_AGENT_BIN;
   if (override && override.trim().length > 0) {
@@ -68,14 +67,10 @@ export async function resolveBin(): Promise<string> {
     return cachedBin;
   }
   for (const candidate of ['cursor-agent', 'agent']) {
-    try {
-      const res = await execa('which', [candidate], { reject: false });
-      if (res.exitCode === 0 && typeof res.stdout === 'string' && res.stdout.trim()) {
-        cachedBin = res.stdout.trim();
-        return cachedBin;
-      }
-    } catch {
-      continue;
+    const res = await run('which', [candidate]);
+    if (res.exitCode === 0 && res.stdout.trim()) {
+      cachedBin = res.stdout.trim();
+      return cachedBin;
     }
   }
   throw new Error(
@@ -83,57 +78,60 @@ export async function resolveBin(): Promise<string> {
   );
 }
 
-export interface DelegateOpts {
-  prompt: string;
-  model: string;
-  resumeChatId?: string | undefined;
-  resumeLatest?: boolean;
-  cloud?: boolean;
-  force?: boolean;
-  approveMcps?: boolean;
-  cwd?: string;
-  timeoutSec?: number;
-  logPath: string;
-  onEvent?: (ev: CursorEvent) => void;
-  onRaw?: (line: string) => void;
-}
+/**
+ * @typedef {Object} BuildArgsInput
+ * @property {string} prompt
+ * @property {string} model
+ * @property {string=} resumeChatId
+ * @property {boolean=} resumeLatest
+ * @property {boolean=} cloud
+ * @property {boolean=} force              Default: true.
+ * @property {boolean=} approveMcps
+ */
 
-export interface DelegateResult {
-  exitCode: number;
-  events: CursorEvent[];
-  child: ChildProcess;
-  killed: boolean;
-}
-
-export function buildArgs(opts: {
-  prompt: string;
-  model: string;
-  resumeChatId?: string | undefined;
-  resumeLatest?: boolean;
-  cloud?: boolean;
-  force?: boolean;
-  approveMcps?: boolean;
-}): string[] {
-  const args: string[] = ['-p', '--output-format', 'stream-json', '--trust', '--model', opts.model];
-  if (opts.force !== false) {
-    args.push('--force');
-  }
-  if (opts.approveMcps) {
-    args.push('--approve-mcps');
-  }
-  if (opts.cloud) {
-    args.push('--cloud');
-  }
-  if (opts.resumeChatId) {
-    args.push(`--resume=${opts.resumeChatId}`);
-  } else if (opts.resumeLatest) {
-    args.push('--resume');
-  }
+/**
+ * @param {BuildArgsInput} opts
+ * @returns {string[]}
+ */
+export function buildArgs(opts) {
+  const args = ['-p', '--output-format', 'stream-json', '--trust', '--model', opts.model];
+  if (opts.force !== false) args.push('--force');
+  if (opts.approveMcps) args.push('--approve-mcps');
+  if (opts.cloud) args.push('--cloud');
+  if (opts.resumeChatId) args.push(`--resume=${opts.resumeChatId}`);
+  else if (opts.resumeLatest) args.push('--resume');
   args.push(opts.prompt);
   return args;
 }
 
-export async function runHeadless(opts: DelegateOpts): Promise<DelegateResult> {
+/**
+ * @typedef {Object} DelegateOpts
+ * @property {string} prompt
+ * @property {string} model
+ * @property {string=} resumeChatId
+ * @property {boolean=} resumeLatest
+ * @property {boolean=} cloud
+ * @property {boolean=} force
+ * @property {boolean=} approveMcps
+ * @property {string=} cwd
+ * @property {number=} timeoutSec
+ * @property {string} logPath
+ * @property {(ev: Record<string, unknown>) => void=} onEvent
+ * @property {(line: string) => void=} onRaw
+ */
+
+/**
+ * @typedef {Object} DelegateResult
+ * @property {number} exitCode
+ * @property {Record<string, unknown>[]} events
+ * @property {boolean} killed
+ */
+
+/**
+ * @param {DelegateOpts} opts
+ * @returns {Promise<DelegateResult>}
+ */
+export async function runHeadless(opts) {
   const bin = await resolveBin();
   const args = buildArgs(opts);
   const child = spawn(bin, args, {
@@ -141,17 +139,17 @@ export async function runHeadless(opts: DelegateOpts): Promise<DelegateResult> {
     stdio: ['ignore', 'pipe', 'pipe'],
     env: process.env,
   });
-
-  const logStream = createWriteStream(opts.logPath, { flags: 'a' });
-  const events: CursorEvent[] = [];
-  let sawResult = false;
-  let killed = false;
-
   if (!child.stdout || !child.stderr) {
     throw new Error('cursor-agent spawn failed: stdout/stderr not attached');
   }
   const childStdout = child.stdout;
   const childStderr = child.stderr;
+  const logStream = createWriteStream(opts.logPath, { flags: 'a' });
+  /** @type {Record<string, unknown>[]} */
+  const events = [];
+  let sawResult = false;
+  let killed = false;
+
   const stdoutLines = createInterface({ input: childStdout, crlfDelay: Infinity });
   stdoutLines.on('line', (line) => {
     logStream.write(line + '\n');
@@ -160,7 +158,7 @@ export async function runHeadless(opts: DelegateOpts): Promise<DelegateResult> {
     if (!ev) return;
     events.push(ev);
     if (opts.onEvent) opts.onEvent(ev);
-    if (ev['type'] === 'result') {
+    if (ev.type === 'result') {
       sawResult = true;
       setTimeout(() => {
         if (!child.killed && child.exitCode === null) {
@@ -168,14 +166,14 @@ export async function runHeadless(opts: DelegateOpts): Promise<DelegateResult> {
           try {
             child.kill('SIGTERM');
           } catch {
-            /* noop */
+            // noop
           }
           setTimeout(() => {
             if (!child.killed && child.exitCode === null) {
               try {
                 child.kill('SIGKILL');
               } catch {
-                /* noop */
+                // noop
               }
             }
           }, 5_000);
@@ -189,75 +187,107 @@ export async function runHeadless(opts: DelegateOpts): Promise<DelegateResult> {
     logStream.write(`# stderr: ${line}\n`);
   });
 
-  let timeoutHandle: NodeJS.Timeout | undefined;
+  let timeoutHandle;
   if (typeof opts.timeoutSec === 'number' && opts.timeoutSec > 0) {
     timeoutHandle = setTimeout(() => {
       killed = true;
       try {
         child.kill('SIGTERM');
       } catch {
-        /* noop */
+        // noop
       }
       setTimeout(() => {
         if (!child.killed && child.exitCode === null) {
           try {
             child.kill('SIGKILL');
           } catch {
-            /* noop */
+            // noop
           }
         }
       }, 5_000);
     }, opts.timeoutSec * 1_000);
   }
 
-  const exitCode: number = await new Promise((resolve) => {
+  const exitCode = await new Promise((resolve) => {
     child.on('close', (code) => {
       resolve(typeof code === 'number' ? code : sawResult ? 0 : 1);
     });
   });
-
   if (timeoutHandle) clearTimeout(timeoutHandle);
-  await new Promise<void>((resolve) => logStream.end(() => resolve()));
-
-  return { exitCode, events, child, killed };
+  await new Promise((resolve) => logStream.end(() => resolve()));
+  return { exitCode, events, killed };
 }
 
-export async function authStatus(): Promise<{ loggedIn: boolean; detail: string }> {
+/**
+ * @returns {Promise<{loggedIn: boolean, detail: string}>}
+ */
+export async function authStatus() {
   try {
     const bin = await resolveBin();
-    const res = await execa(bin, ['status'], { reject: false, timeout: 5_000 });
-    const text = `${res.stdout ?? ''}\n${res.stderr ?? ''}`.toLowerCase();
+    const res = await run(bin, ['status'], { timeoutMs: 5_000 });
+    const text = `${res.stdout}\n${res.stderr}`.toLowerCase();
     const loggedIn =
       res.exitCode === 0 &&
       (text.includes('logged in') || text.includes('authenticated') || text.includes('signed in'));
-    return { loggedIn, detail: `${res.stdout ?? ''}${res.stderr ? `\n${res.stderr}` : ''}`.trim() };
+    return {
+      loggedIn,
+      detail: `${res.stdout}${res.stderr ? `\n${res.stderr}` : ''}`.trim(),
+    };
   } catch (err) {
     return { loggedIn: false, detail: String(err) };
   }
 }
 
-export interface McpEntry {
-  name: string;
-  status: string;
-  loaded: boolean;
-}
-
-export async function listConfiguredMcps(): Promise<McpEntry[]> {
+/**
+ * @returns {Promise<string[]>}
+ */
+export async function listModels() {
   try {
     const bin = await resolveBin();
-    const res = await execa(bin, ['mcp', 'list'], { reject: false, timeout: 5_000 });
+    const res = await run(bin, ['--list-models'], { timeoutMs: 10_000 });
+    if (res.exitCode !== 0) {
+      const fallback = await run(bin, ['models'], { timeoutMs: 10_000 });
+      return fallback.stdout
+        .split('\n')
+        .map((l) => l.trim())
+        .filter(Boolean);
+    }
+    return res.stdout
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * @typedef {Object} McpEntry
+ * @property {string} name
+ * @property {string} status
+ * @property {boolean} loaded
+ */
+
+/**
+ * @returns {Promise<McpEntry[]>}
+ */
+export async function listConfiguredMcps() {
+  try {
+    const bin = await resolveBin();
+    const res = await run(bin, ['mcp', 'list'], { timeoutMs: 5_000 });
     if (res.exitCode !== 0) return [];
-    const out: McpEntry[] = [];
-    // Strip ANSI color/cursor control codes — cursor-agent writes them even in pipe mode.
+    // Strip ANSI control sequences — cursor-agent writes them even under `run`.
     // eslint-disable-next-line no-control-regex
-    const text = String(res.stdout ?? '').replace(/\x1b\[[0-9;]*[A-Za-z]/g, '');
+    const text = res.stdout.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '');
+    /** @type {McpEntry[]} */
+    const out = [];
     for (const raw of text.split('\n')) {
       const line = raw.trim();
       if (!line || line.startsWith('Loading')) continue;
       const match = line.match(/^([^:\s]+):\s*(.+)$/);
       if (!match) continue;
-      const name = match[1]!;
-      const status = match[2]!.trim();
+      const name = match[1];
+      const status = match[2].trim();
       const lower = status.toLowerCase();
       const loaded = lower.startsWith('loaded') || lower === 'ok' || lower.includes('approved');
       out.push({ name, status, loaded });
@@ -268,70 +298,55 @@ export async function listConfiguredMcps(): Promise<McpEntry[]> {
   }
 }
 
-export async function listModels(): Promise<string[]> {
+/**
+ * @typedef {Object} SessionSummary
+ * @property {string} id
+ * @property {string=} summary
+ * @property {string=} updatedAt
+ */
+
+/**
+ * @param {string} [cwd]
+ * @returns {Promise<SessionSummary[]>}
+ */
+export async function listSessions(cwd = process.cwd()) {
   try {
     const bin = await resolveBin();
-    const res = await execa(bin, ['--list-models'], { reject: false, timeout: 10_000 });
-    if (res.exitCode !== 0) {
-      const fallback = await execa(bin, ['models'], { reject: false, timeout: 10_000 });
-      return (fallback.stdout ?? '')
-        .split('\n')
-        .map((l) => l.trim())
-        .filter(Boolean);
-    }
-    return (res.stdout ?? '')
-      .split('\n')
-      .map((l) => l.trim())
-      .filter(Boolean);
-  } catch {
-    return [];
-  }
-}
-
-export interface SessionSummary {
-  id: string;
-  summary?: string;
-  updatedAt?: string;
-}
-
-export async function listSessions(cwd: string = process.cwd()): Promise<SessionSummary[]> {
-  try {
-    const bin = await resolveBin();
-    const res = await execa(bin, ['ls', '--output-format', 'json'], {
+    const res = await run(bin, ['ls', '--output-format', 'json'], {
       cwd,
-      reject: false,
-      timeout: 5_000,
+      timeoutMs: 5_000,
     });
     if (res.exitCode !== 0 || !res.stdout) return [];
-    let parsed: unknown;
+    let parsed;
     try {
       parsed = JSON.parse(res.stdout);
     } catch {
       return [];
     }
     if (!Array.isArray(parsed)) return [];
-    const out: SessionSummary[] = [];
+    /** @type {SessionSummary[]} */
+    const out = [];
     for (const row of parsed) {
       if (!row || typeof row !== 'object') continue;
-      const rec = row as Record<string, unknown>;
       const id =
-        (typeof rec['id'] === 'string' && rec['id']) ||
-        (typeof rec['chat_id'] === 'string' && rec['chat_id']) ||
-        (typeof rec['chatId'] === 'string' && rec['chatId']);
+        (typeof row.id === 'string' && row.id) ||
+        (typeof row.chat_id === 'string' && row.chat_id) ||
+        (typeof row.chatId === 'string' && row.chatId);
       if (!id) continue;
       const summary =
-        typeof rec['summary'] === 'string'
-          ? (rec['summary'] as string)
-          : typeof rec['title'] === 'string'
-            ? (rec['title'] as string)
+        typeof row.summary === 'string'
+          ? row.summary
+          : typeof row.title === 'string'
+            ? row.title
             : undefined;
       const updatedAt =
-        typeof rec['updated_at'] === 'string'
-          ? (rec['updated_at'] as string)
-          : typeof rec['updatedAt'] === 'string'
-            ? (rec['updatedAt'] as string)
+        typeof row.updated_at === 'string'
+          ? row.updated_at
+          : typeof row.updatedAt === 'string'
+            ? row.updatedAt
             : undefined;
-      const entry: SessionSummary = { id: id as string };
+      /** @type {SessionSummary} */
+      const entry = { id };
       if (summary !== undefined) entry.summary = summary;
       if (updatedAt !== undefined) entry.updatedAt = updatedAt;
       out.push(entry);
@@ -342,7 +357,11 @@ export async function listSessions(cwd: string = process.cwd()): Promise<Session
   }
 }
 
-export function maskSecrets(input: string): string {
+/**
+ * @param {string} input
+ * @returns {string}
+ */
+export function maskSecrets(input) {
   let out = input;
   for (const [name, value] of Object.entries(process.env)) {
     if (!value || value.length < 4) continue;

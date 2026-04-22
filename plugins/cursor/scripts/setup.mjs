@@ -1,34 +1,29 @@
 #!/usr/bin/env node
 import { accessSync, constants as fsConstants, existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { execa } from 'execa';
-import { collapseArguments, parseArgv } from './lib/argv.js';
-import { authStatus, listConfiguredMcps, listModels, resolveBin } from './lib/cursor.js';
-import { ensureDir, jobsDir, pluginHome } from './lib/paths.js';
+import { collapseArguments, parseArgv } from './lib/args.mjs';
+import { authStatus, listConfiguredMcps, listModels, resolveBin } from './lib/cursor.mjs';
+import { ensureDir, jobsDir, pluginHome } from './lib/paths.mjs';
+import { run } from './lib/run.mjs';
 
-function pluginRoot(): string {
+function pluginRoot() {
   const envRoot = process.env.CLAUDE_PLUGIN_ROOT;
   if (envRoot && envRoot.trim()) return envRoot;
-  return fileURLToPath(new URL('..', import.meta.url));
+  // scripts/setup.mjs → ../ is the plugin root
+  return dirname(dirname(fileURLToPath(import.meta.url)));
 }
 
-function checkBuild(): { ok: boolean; detail: string } {
-  const dist = join(pluginRoot(), 'dist');
-  if (!existsSync(dist)) {
-    return {
-      ok: false,
-      detail: `bundled dist/ missing — re-install the plugin, or for dev work run \`cd ${pluginRoot()} && npm install && npm run build\`.`,
-    };
-  }
-  const entry = join(dist, 'setup.js');
+function checkScripts() {
+  const scripts = join(pluginRoot(), 'scripts');
+  const entry = join(scripts, 'setup.mjs');
   if (!existsSync(entry)) {
-    return { ok: false, detail: `dist/ exists but setup.js is missing — run \`npm run build\`.` };
+    return { ok: false, detail: `scripts/ missing or incomplete at ${scripts}` };
   }
-  return { ok: true, detail: `bundled at ${dist}` };
+  return { ok: true, detail: `scripts at ${scripts}` };
 }
 
-function checkJobsDir(): { ok: boolean; detail: string } {
+function checkJobsDir() {
   try {
     const home = pluginHome();
     ensureDir(home);
@@ -41,15 +36,14 @@ function checkJobsDir(): { ok: boolean; detail: string } {
   }
 }
 
-function maskKey(value: string): string {
+function maskKey(value) {
   if (value.length <= 8) return '***';
   return `${value.slice(0, 4)}…${value.slice(-4)}`;
 }
 
-async function doctor(): Promise<number> {
-  const lines: string[] = ['### /cursor:setup --doctor\n'];
-  const checks: Array<[string, { ok: boolean; detail: string }]> = [];
-
+async function doctor() {
+  const lines = ['### /cursor:setup --doctor\n'];
+  const checks = [];
   lines.push(`- Node: ${process.version}`);
   lines.push(`- Platform: ${process.platform} (${process.arch})`);
   lines.push(`- Plugin home: \`${pluginHome()}\``);
@@ -64,32 +58,24 @@ async function doctor(): Promise<number> {
       { ok: false, detail: err instanceof Error ? err.message : String(err) },
     ]);
   }
-
   if (bin) {
-    try {
-      const ver = await execa(bin, ['--version'], { reject: false, timeout: 5_000 });
-      checks.push([
-        'cursor-agent version',
-        { ok: ver.exitCode === 0, detail: String(ver.stdout ?? ver.stderr ?? '').trim() },
-      ]);
-    } catch (err) {
-      checks.push(['cursor-agent version', { ok: false, detail: String(err) }]);
-    }
+    const ver = await run(bin, ['--version'], { timeoutMs: 5_000 });
+    checks.push([
+      'cursor-agent version',
+      { ok: ver.exitCode === 0, detail: (ver.stdout || ver.stderr).trim() },
+    ]);
     const auth = await authStatus();
     checks.push([
       'cursor-agent auth',
       {
         ok: auth.loggedIn,
-        detail: auth.loggedIn ? 'logged in' : `not logged in — run \`cursor-agent login\``,
+        detail: auth.loggedIn ? 'logged in' : 'not logged in — run `cursor-agent login`',
       },
     ]);
   }
 
-  const build = checkBuild();
-  checks.push(['compiled dist/', build]);
-
-  const jobs = checkJobsDir();
-  checks.push(['jobs directory writable', jobs]);
+  checks.push(['scripts', checkScripts()]);
+  checks.push(['jobs directory writable', checkJobsDir()]);
 
   const apiKey = process.env.CURSOR_API_KEY;
   checks.push([
@@ -124,7 +110,7 @@ async function doctor(): Promise<number> {
   return allOk ? 0 : 1;
 }
 
-async function printModels(): Promise<number> {
+async function printModels() {
   process.stdout.write('### Cursor models (from your account)\n\n');
   const models = await listModels();
   if (models.length === 0) {
@@ -137,7 +123,7 @@ async function printModels(): Promise<number> {
   return 0;
 }
 
-async function maybeInstall(): Promise<number> {
+async function maybeInstall() {
   process.stdout.write(
     'This will run: `curl https://cursor.com/install -fsS | bash`\n' +
       'Aborting automatic execution — re-run the command above manually to install.\n',
@@ -145,8 +131,8 @@ async function maybeInstall(): Promise<number> {
   return 0;
 }
 
-async function baseCheck(): Promise<number> {
-  const lines: string[] = ['### /cursor:setup\n'];
+async function baseCheck() {
+  const lines = ['### /cursor:setup\n'];
   try {
     const bin = await resolveBin();
     lines.push(`- ✓ \`cursor-agent\` at \`${bin}\``);
@@ -156,8 +142,8 @@ async function baseCheck(): Promise<number> {
         ? '- ✓ Cursor CLI is logged in.'
         : '- ✗ Cursor CLI is not logged in. Run `cursor-agent login` in a terminal.',
     );
-    const build = checkBuild();
-    lines.push(build.ok ? `- ✓ ${build.detail}` : `- ✗ ${build.detail}`);
+    const scripts = checkScripts();
+    lines.push(scripts.ok ? `- ✓ ${scripts.detail}` : `- ✗ ${scripts.detail}`);
     const jobs = checkJobsDir();
     lines.push(jobs.ok ? `- ✓ jobs dir writable: \`${jobs.detail}\`` : `- ✗ ${jobs.detail}`);
     lines.push('');
@@ -176,26 +162,25 @@ async function baseCheck(): Promise<number> {
   }
 }
 
-export async function main(rawArgv: string[]): Promise<number> {
+/**
+ * @param {string[]} rawArgv
+ * @returns {Promise<number>}
+ */
+export async function main(rawArgv) {
   const delimiterIdx = rawArgv.indexOf('--');
   const firstHalf = delimiterIdx === -1 ? [] : rawArgv.slice(0, delimiterIdx);
   const userRaw =
     delimiterIdx === -1 ? rawArgv.join(' ') : rawArgv.slice(delimiterIdx + 1).join(' ');
   const combined = [...firstHalf, ...collapseArguments(userRaw)];
-  const { flags } = parseArgv(combined, ['doctor', 'print-models', 'printModels', 'install']);
+  const { flags } = parseArgv(combined, ['doctor', 'print-models', 'install']);
   if (flags['doctor']) return doctor();
   if (flags['print-models'] || flags['printModels']) return printModels();
   if (flags['install']) return maybeInstall();
   return baseCheck();
 }
 
-const invokedAsScript = (() => {
-  try {
-    return process.argv[1] === fileURLToPath(import.meta.url);
-  } catch {
-    return false;
-  }
-})();
+import { invokedAsScript as __isScript } from './lib/invoked.mjs';
+const invokedAsScript = __isScript(import.meta.url);
 
 if (invokedAsScript) {
   main(process.argv.slice(2))
