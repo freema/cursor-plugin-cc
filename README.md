@@ -1,6 +1,7 @@
 # cursor-plugin-cc
 
-> Use Cursor CLI from Claude Code to delegate coding tasks to Composer 2 and other Cursor models.
+> **Claude plans. Cursor writes. Claude reviews.**
+> A Claude Code plugin that delegates coding _execution_ to Cursor's Composer 2 — without ever leaving the Claude Code TUI.
 
 [![CI](https://github.com/freema/cursor-plugin-cc/actions/workflows/ci.yml/badge.svg)](https://github.com/freema/cursor-plugin-cc/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
@@ -8,7 +9,78 @@
 [![Claude Code plugin](https://img.shields.io/badge/Claude%20Code-plugin-7c3aed.svg)](https://claude.com/claude-code)
 [![Cursor CLI](https://img.shields.io/badge/Cursor-cursor--agent-000000.svg)](https://cursor.com)
 
-A [Claude Code](https://claude.com/claude-code) plugin that hands off coding tasks from Claude to the Cursor CLI (`cursor-agent`). Claude stays the planner and reviewer; Cursor is the fast executor — `composer-2-fast` by default (Cursor's own current default, and the fastest Composer variant), in force/yolo mode, optionally in the background.
+![Demo: plan in Claude Code → delegate to Cursor → review the diff](docs/demo.gif)
+
+## Plan. Delegate. Ship.
+
+```text
+you ▸ /plan add a /health endpoint to our Express app that returns { status, version, uptime }
+
+claude ▸ Plan written to ~/.claude/plans/health-endpoint.md
+         (4 acceptance criteria, 3 files to touch, verify with `npm test`)
+
+you ▸ /cursor:from-plan --delegate
+
+plugin ▸ wrote tasks/20260427-1830-health-endpoint.md
+       ▸ handing off to cursor-agent (composer-2-fast, --force)…
+
+cursor ▸ ✓ src/routes/health.ts          (new, 24 lines)
+       ▸ ✓ src/app.ts                    (mounted route)
+       ▸ ✓ tests/health.test.ts          (new, 3 passing)
+       ▸ done in 11s · chat_id=V1StGXR8_Z
+
+you ▸ review the diff
+
+claude ▸ LGTM. Nit: hard-coded "1.0.0" — pull from package.json instead.
+
+you ▸ /cursor:resume "read version from package.json"
+
+cursor ▸ ✓ src/routes/health.ts          (1 line changed)
+       ▸ ✓ tests/health.test.ts          (assertion updated, still passing)
+       ▸ done in 4s
+```
+
+That's the whole loop. Claude does the **thinking** (plan, review). Cursor does the **typing** (file edits, tests). You stay in one TUI.
+
+**Why this is fast:** `composer-2-fast` is Cursor's tuned-for-CLI variant — it ships small, well-scoped changes in seconds. Claude Code spends its tokens on planning and reviewing, where thinking actually matters. Two tools, each doing what they're best at.
+
+## The flow — three commands, end to end
+
+This is the entire happy path. Three commands inside Claude Code:
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│  1.  /plan <what you want>                                       │
+│      → Claude drafts a plan into ~/.claude/plans/<slug>.md       │
+│        (the approval dialog appears — you can ignore it,         │
+│         the plan file is already on disk)                        │
+├──────────────────────────────────────────────────────────────────┤
+│  2.  /cursor:from-plan --delegate                                │
+│      → plugin reads the newest plan from ~/.claude/plans/        │
+│      → rewrites it as tasks/<YYYYMMDD-HHmm>-<slug>.md            │
+│        (Cursor-shaped: Goal / Context / Acceptance / Files /     │
+│         How to verify / Guardrails)                              │
+│      → invokes `cursor-agent -p --force` with prompt:            │
+│        "Implement the task in @tasks/…. Follow every section."   │
+│      → Cursor reads the @path, writes the code, reports back     │
+├──────────────────────────────────────────────────────────────────┤
+│  3.  <your verify command>     e.g. `npm test`, `task test`,     │
+│                                     `pnpm test <name>`           │
+│      → confirm the change is green                               │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+What lives where after a run:
+
+| Path | Written by | Purpose |
+| ---- | ---------- | ------- |
+| `~/.claude/plans/<slug>.md` | Claude (plan mode) | Source of truth for the plan |
+| `tasks/<YYYYMMDD-HHmm>-<slug>.md` | This plugin | Cursor-shaped contract — **commit this** |
+| `<your source files>` | Cursor | The actual code change |
+
+**Iterate:** if Claude's review of the diff finds something, just run `/cursor:resume "fix X"` — same Cursor chat, no replanning. For a fresh slice, run `/cursor:from-plan --delegate` again with a new plan, or `/cursor:delegate "<task>"` directly without plan mode.
+
+**Skip plan mode** for quick one-shots: `/cursor:delegate "<task description>"` skips steps 1–2 and goes straight to Cursor with whatever string you give it. Good for small, obvious work where a plan would be overkill.
 
 ## What you get
 
