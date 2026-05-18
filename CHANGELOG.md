@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.2.2 — resume bug fix + safer default model
+
+### Fixed
+
+- **`/cursor:resume <prompt…>`** no longer eats the first prompt word as a chat-id. `--resume` was missing from the boolean-flag whitelist, so the argv parser greedily consumed the next positional token (`Cursor chat id: řekni — resume with cursor-agent --resume=řekni`). Declared `resume` as boolean in `delegate.mjs`; `--resume=<chat-id>` still works because the `=` form is parsed independently. Regression tests cover both shapes plus a multi-word non-ASCII prompt.
+
+### Changed
+
+- **Default model is now `auto`** (was `composer-2-fast`). Users without a paid Composer 2 seat can run the plugin out of the box; Cursor picks whatever model the account is entitled to. Power users can pin a default globally via the new `CURSOR_PLUGIN_CC_DEFAULT_MODEL` env var (accepts the same aliases as `--model`), or per-invocation via `--model <id>`.
+- README install section moved up front; GitHub install marked as preferred, local checkout install moved below it for hacking on the plugin. Requirements list now lives under Install and no longer implies a paid subscription is mandatory.
+
 ## 0.2.1 — OSS ergonomics (docs-only)
 
 ### Added

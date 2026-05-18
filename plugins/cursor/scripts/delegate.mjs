@@ -15,7 +15,16 @@ import {
 import { ensureDir, jobsDir, logsDir } from './lib/paths.mjs';
 import { extractChatId, summariseEvents } from './lib/parse.mjs';
 
-const BOOLEAN_FLAGS = ['background', 'wait', 'fresh', 'force', 'cloud', 'git-check', 'help'];
+const BOOLEAN_FLAGS = [
+  'background',
+  'wait',
+  'fresh',
+  'force',
+  'cloud',
+  'git-check',
+  'help',
+  'resume',
+];
 
 function parseFlags(argv) {
   const { positional, flags } = parseArgv(argv, BOOLEAN_FLAGS);

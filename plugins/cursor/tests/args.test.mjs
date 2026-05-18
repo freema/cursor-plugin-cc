@@ -60,6 +60,21 @@ describe('parseArgv', () => {
     expect(r.flags['background']).toBe(true);
     expect(r.positional).toEqual(['task-text']);
   });
+
+  // Regression: resume.mjs unshifts `--resume` onto argv. Before declaring
+  // `resume` as boolean this consumed the first prompt word as chat-id,
+  // producing bogus `--resume=<word>` calls to cursor-agent.
+  it('--resume followed by a prompt does not eat the prompt token', () => {
+    const r = parseArgv(['--resume', 'řekni', 'mi', 'něco', 'o', 'teto', 'službě'], ['resume']);
+    expect(r.flags['resume']).toBe(true);
+    expect(r.positional).toEqual(['řekni', 'mi', 'něco', 'o', 'teto', 'službě']);
+  });
+
+  it('--resume=<id> still extracts the chat id even when boolean-declared', () => {
+    const r = parseArgv(['--resume=chat_abc', 'follow', 'up'], ['resume']);
+    expect(r.flags['resume']).toBe('chat_abc');
+    expect(r.positional).toEqual(['follow', 'up']);
+  });
 });
 
 describe('collapseArguments', () => {

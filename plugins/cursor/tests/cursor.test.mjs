@@ -44,6 +44,12 @@ describe('buildArgs', () => {
 });
 
 describe('resolveModel', () => {
+  const prevDefault = process.env.CURSOR_PLUGIN_CC_DEFAULT_MODEL;
+  afterEach(() => {
+    if (prevDefault === undefined) delete process.env.CURSOR_PLUGIN_CC_DEFAULT_MODEL;
+    else process.env.CURSOR_PLUGIN_CC_DEFAULT_MODEL = prevDefault;
+  });
+
   it('maps aliases to real Cursor ids', () => {
     expect(resolveModel('composer')).toBe('composer-2-fast');
     expect(resolveModel('fast')).toBe('composer-2-fast');
@@ -55,9 +61,22 @@ describe('resolveModel', () => {
     expect(resolveModel('gemini')).toBe('gemini-3.1-pro');
   });
 
-  it('defaults to composer-2-fast when empty', () => {
+  it('defaults to auto when empty (no env override)', () => {
+    delete process.env.CURSOR_PLUGIN_CC_DEFAULT_MODEL;
+    expect(resolveModel(undefined)).toBe('auto');
+    expect(resolveModel('')).toBe('auto');
+  });
+
+  it('honours CURSOR_PLUGIN_CC_DEFAULT_MODEL when no input is given', () => {
+    process.env.CURSOR_PLUGIN_CC_DEFAULT_MODEL = 'composer';
     expect(resolveModel(undefined)).toBe('composer-2-fast');
-    expect(resolveModel('')).toBe('composer-2-fast');
+    process.env.CURSOR_PLUGIN_CC_DEFAULT_MODEL = 'some-custom-id';
+    expect(resolveModel('')).toBe('some-custom-id');
+  });
+
+  it('explicit input wins over the env default', () => {
+    process.env.CURSOR_PLUGIN_CC_DEFAULT_MODEL = 'composer';
+    expect(resolveModel('opus')).toBe('claude-opus-4-7-high');
   });
 
   it('passes unknown ids through unchanged', () => {

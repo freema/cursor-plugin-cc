@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { main as delegateMain } from '../scripts/delegate.mjs';
 import { listJobs } from '../scripts/lib/jobs.mjs';
+import { main as resumeMain } from '../scripts/resume.mjs';
 import { HAPPY_FIXTURE, STUB_BIN, makeTempHome } from './helpers.mjs';
 
 describe('delegate foreground', () => {
@@ -70,5 +71,20 @@ describe('delegate foreground', () => {
     } finally {
       errSpy.mockRestore();
     }
+  });
+
+  // Regression: `/cursor:resume <multi-word prompt>` used to send the first
+  // prompt word as the chat-id because `--resume` greedily consumed it.
+  it('resume.mjs preserves a multi-word non-ASCII prompt', async () => {
+    const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    try {
+      const code = await resumeMain(['--no-git-check', '--', 'řekni mi něco o teto službě']);
+      expect(code).toBe(0);
+    } finally {
+      writeSpy.mockRestore();
+    }
+    const jobs = listJobs(tmp.dir);
+    expect(jobs.length).toBe(1);
+    expect(jobs[0].prompt).toBe('řekni mi něco o teto službě');
   });
 });
