@@ -44,6 +44,39 @@ That's the whole loop. Claude does the **thinking** (plan, review). Cursor does 
 
 **Why this is fast:** `composer-2-fast` is Cursor's tuned-for-CLI variant — it ships small, well-scoped changes in seconds. Claude Code spends its tokens on planning and reviewing, where thinking actually matters. Two tools, each doing what they're best at.
 
+## Install
+
+**Preferred — from GitHub:**
+
+```
+/plugin marketplace add freema/cursor-plugin-cc
+/plugin install cursor@tomas-cursor
+/reload-plugins
+/cursor:setup
+```
+
+**Local, for hacking on the plugin from a checkout:**
+
+```
+/plugin marketplace add /Users/you/path/to/cursor-plugin-cc
+/plugin install cursor@tomas-cursor
+/reload-plugins
+/cursor:setup
+```
+
+> ⚠️ **Do not skip `/reload-plugins`.** Right after `/plugin install` the `/cursor:*` commands are NOT yet available — Claude Code only picks them up after a plugin reload. If you see `Unknown command: /cursor:setup`, you forgot this step — run `/reload-plugins` and try again.
+
+The plugin ships as **plain ESM JavaScript with zero runtime dependencies** — just the Node stdlib. `/plugin install` is literally all you need; no `npm install`, no build step, no `dist/` folder. Each slash command runs `node "${CLAUDE_PLUGIN_ROOT}/scripts/<cmd>.mjs"` directly from the committed source.
+
+The first `/cursor:setup` run tells you if `cursor-agent` is missing or unauthenticated. For hacking on the plugin itself (tests, lint, formatting), see [Contributing](#contributing) below.
+
+### Requirements
+
+- Node.js **≥ 18.18**
+- A Cursor account — paid for Composer 2 models; free works with `--model auto` or other entitled models
+- `cursor-agent` on your `PATH` — install via `curl https://cursor.com/install -fsS | bash`
+- `cursor-agent login` completed at least once
+
 ## The flow — three commands, end to end
 
 This is the entire happy path. Three commands inside Claude Code:
@@ -112,39 +145,6 @@ So: Claude plans, Cursor writes, Claude reviews, repeat. Glued together by seven
 
 This plugin is built around delegating _execution_ — writing code — to Cursor's Composer 2 for speed. Claude Code stays the orchestrator, planner, and reviewer. There is intentionally **no** `/cursor:review` or `/cursor:adversarial-review` command: Cursor is the "doer" here, not the critic. If you want review, ask Claude to review Cursor's diff in the usual way.
 
-## Requirements
-
-- Node.js **≥ 18.18**
-- A Cursor subscription (Composer 2 is included in paid tiers)
-- `cursor-agent` on your `PATH` — install via `curl https://cursor.com/install -fsS | bash`
-- `cursor-agent login` completed at least once
-
-## Install
-
-Local, for immediate testing from this repository:
-
-```
-/plugin marketplace add /Users/you/path/to/cursor-plugin-cc
-/plugin install cursor@tomas-cursor
-/reload-plugins
-/cursor:setup
-```
-
-From GitHub once published:
-
-```
-/plugin marketplace add freema/cursor-plugin-cc
-/plugin install cursor@tomas-cursor
-/reload-plugins
-/cursor:setup
-```
-
-> ⚠️ **Do not skip `/reload-plugins`.** Right after `/plugin install` the `/cursor:*` commands are NOT yet available — Claude Code only picks them up after a plugin reload. If you see `Unknown command: /cursor:setup`, you forgot this step — run `/reload-plugins` and try again.
-
-The plugin ships as **plain ESM JavaScript with zero runtime dependencies** — just the Node stdlib. `/plugin install` is literally all you need; no `npm install`, no build step, no `dist/` folder. Each slash command runs `node "${CLAUDE_PLUGIN_ROOT}/scripts/<cmd>.mjs"` directly from the committed source.
-
-The first `/cursor:setup` run tells you if `cursor-agent` is missing or unauthenticated. For hacking on the plugin itself (tests, lint, formatting), see [Contributing](#contributing) below.
-
 ## Usage
 
 ### `/cursor:delegate <task...>`
@@ -153,7 +153,7 @@ Hand a coding task to `cursor-agent -p …`.
 
 | Flag                   | Default                    | Effect                                                                                                                                                                                                                                                                                                                                                         |
 | ---------------------- | -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--model <id>`         | `composer-2-fast`          | Aliases → real Cursor ids: `composer`/`fast` → `composer-2-fast`, `composer-2` → `composer-2`, `sonnet` → `claude-4.6-sonnet-medium`, `opus` → `claude-opus-4-7-high`, `gpt`/`codex` → `gpt-5.3-codex`, `grok` → `grok-4-20`, `gemini` → `gemini-3.1-pro`, `auto` → `auto`. Unknown ids forwarded as-is. Run `/cursor:setup --print-models` for the live list. |
+| `--model <id>`         | `auto` (or `$CURSOR_PLUGIN_CC_DEFAULT_MODEL`) | Aliases → real Cursor ids: `composer`/`fast` → `composer-2-fast`, `composer-2` → `composer-2`, `sonnet` → `claude-4.6-sonnet-medium`, `opus` → `claude-opus-4-7-high`, `gpt`/`codex` → `gpt-5.3-codex`, `grok` → `grok-4-20`, `gemini` → `gemini-3.1-pro`, `auto` → `auto`. Unknown ids forwarded as-is. `auto` lets Cursor pick whatever model your account is entitled to — safe if you don't have a Composer 2 seat. Run `/cursor:setup --print-models` for the live list. |
 | `--background`         | off                        | Detach; the command returns a job id immediately.                                                                                                                                                                                                                                                                                                              |
 | `--wait`               | on (if not `--background`) | Block until finished.                                                                                                                                                                                                                                                                                                                                          |
 | `--fresh`              | off                        | Start a brand-new Cursor session (no resume).                                                                                                                                                                                                                                                                                                                  |
@@ -363,13 +363,14 @@ The task file stays in `tasks/` as a durable record — the contract between pla
 
 ## Configuration
 
-| Env var                 | Purpose                                                                         |
-| ----------------------- | ------------------------------------------------------------------------------- |
-| `CURSOR_API_KEY`        | Forwarded to `cursor-agent`. Optional — `cursor-agent login` is usually enough. |
-| `CURSOR_AGENT_BIN`      | Override binary path (used by the test suite).                                  |
-| `CURSOR_PLUGIN_CC_HOME` | Override the jobs-registry root (default `~/.cursor-plugin-cc`).                |
+| Env var                           | Purpose                                                                                                            |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `CURSOR_API_KEY`                  | Forwarded to `cursor-agent`. Optional — `cursor-agent login` is usually enough.                                    |
+| `CURSOR_AGENT_BIN`                | Override binary path (used by the test suite).                                                                     |
+| `CURSOR_PLUGIN_CC_HOME`           | Override the jobs-registry root (default `~/.cursor-plugin-cc`).                                                   |
+| `CURSOR_PLUGIN_CC_DEFAULT_MODEL`  | Default `--model` when none is passed. Accepts the same aliases as `--model` (e.g. `composer`, `opus`). Falls back to `auto`. |
 
-A repo-local `.cursor-plugin-cc.json` is on the roadmap for overriding the default model per repo; until then, set `--model` per invocation.
+A repo-local `.cursor-plugin-cc.json` is on the roadmap for overriding the default model per repo; until then, set `--model` per invocation or pin `CURSOR_PLUGIN_CC_DEFAULT_MODEL` in your shell.
 
 ## Moving work back to Cursor
 

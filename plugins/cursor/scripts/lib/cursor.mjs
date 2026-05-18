@@ -41,14 +41,30 @@ export const MODEL_ALIASES = {
   'gemini-flash': 'gemini-3-flash',
 };
 
-export const DEFAULT_MODEL = 'composer-2-fast';
+// `auto` lets Cursor pick whatever model the account is entitled to —
+// safe default for users without a paid `composer-2-fast` seat. Power users
+// can override per-invocation via `--model <id>` or globally via the env var
+// CURSOR_PLUGIN_CC_DEFAULT_MODEL.
+export const DEFAULT_MODEL = 'auto';
+
+/**
+ * @returns {string}
+ */
+export function defaultModel() {
+  const fromEnv = process.env.CURSOR_PLUGIN_CC_DEFAULT_MODEL;
+  if (fromEnv && fromEnv.trim().length > 0) {
+    const key = fromEnv.trim().toLowerCase();
+    return MODEL_ALIASES[key] ?? fromEnv.trim();
+  }
+  return DEFAULT_MODEL;
+}
 
 /**
  * @param {string|undefined} input
  * @returns {string}
  */
 export function resolveModel(input) {
-  if (!input || input.trim() === '') return DEFAULT_MODEL;
+  if (!input || input.trim() === '') return defaultModel();
   const key = input.trim().toLowerCase();
   return MODEL_ALIASES[key] ?? input.trim();
 }
