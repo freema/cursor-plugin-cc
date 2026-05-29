@@ -27,3 +27,11 @@ export const BROWSER_FALLBACK_FIXTURE = new URL(
   './fixtures/cursor-events/browser-fallback.ndjson',
   import.meta.url,
 ).pathname;
+export const REVIEW_HAPPY_FIXTURE = new URL(
+  './fixtures/cursor-events/review-happy.ndjson',
+  import.meta.url,
+).pathname;
+export const REVIEW_VIOLATION_FIXTURE = new URL(
+  './fixtures/cursor-events/review-violation.ndjson',
+  import.meta.url,
+).pathname;

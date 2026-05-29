@@ -46,7 +46,8 @@
     "resume": "node scripts/resume.mjs",
     "sessions": "node scripts/sessions.mjs",
     "setup": "node scripts/setup.mjs",
-    "browser": "node scripts/browser.mjs"
+    "browser": "node scripts/browser.mjs",
+    "review": "node scripts/review.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.16.0",

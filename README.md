@@ -117,10 +117,11 @@ What lives where after a run:
 
 ## What you get
 
-Nine slash commands under the `cursor:` namespace:
+Ten slash commands under the `cursor:` namespace:
 
 - **`/cursor:delegate`** — hand a coding task to Cursor, foreground or background.
 - **`/cursor:from-plan`** — turn a Claude Code plan (from plan mode) into a `tasks/<file>.md` and hand it off to Cursor.
+- **`/cursor:review`** — read-only code review of your git diff by a Cursor model. Reports findings; never edits files.
 - **`/cursor:browser`** — verify a URL / flow in a real browser via Cursor's `chrome-devtools` MCP.
 - **`/cursor:status`** — list recent jobs or inspect a specific one.
 - **`/cursor:result`** — print the final output of a finished job.
@@ -141,9 +142,11 @@ Cursor CLI has its own plan mode and it is fine, but execution is where Cursor r
 
 So: Claude plans, Cursor writes, Claude reviews, repeat. Glued together by seven slash commands and one subagent.
 
-## Why not just `/codex:review`-style?
+## A second opinion: `/cursor:review`
 
-This plugin is built around delegating _execution_ — writing code — to Cursor's Composer 2 for speed. Claude Code stays the orchestrator, planner, and reviewer. There is intentionally **no** `/cursor:review` or `/cursor:adversarial-review` command: Cursor is the "doer" here, not the critic. If you want review, ask Claude to review Cursor's diff in the usual way.
+The core loop stays **Claude plans, Cursor writes, Claude reviews** — that is where Claude Code earns its keep. But sometimes you want a _second_ reviewer on the same diff: a different model with a fresh perspective, or a deeper pass from `gpt`/`opus`/`gemini` while Claude keeps its context for orchestration. That is what `/cursor:review` is for.
+
+It is modelled on [`openai/codex-plugin-cc`](https://github.com/openai/codex-plugin-cc)'s `/codex:review`, adapted to the Cursor CLI: the plugin collects the git diff itself (working tree or branch vs a base), hands it to a Cursor model with a strict **review-only** prompt, and returns the findings verbatim. It never edits your files — a post-flight check fails the job if the run touches the working tree, so a review can't quietly turn into an edit. See [`/cursor:review`](#cursorreview-flags-focus) under Usage for flags and examples.
 
 ## Usage
 
@@ -195,6 +198,35 @@ Examples:
 ```
 
 This is the closest thing to "plan in Claude, execute in Cursor" in one session: Claude does the thinking, Cursor does the typing, and the task file is a durable contract between the two.
+
+### `/cursor:review [flags] [focus...]`
+
+Read-only code review of your git diff by a Cursor model. The plugin collects the diff itself, embeds it in a strict review-only prompt, runs `cursor-agent` over it, and prints the findings verbatim — grouped Blocking / Should-fix / Nits with a one-line verdict. It does **not** edit files; if the run touches the working tree anyway, a post-flight check marks the job `failed` and flags it. Tracked as a normal job, so `/cursor:status`, `/cursor:result` and `/cursor:cancel` all work on it.
+
+By default it picks the target automatically: a dirty working tree is reviewed as-is; a clean tree falls back to a branch diff against the detected default branch. Any trailing text is passed as a reviewer **focus**.
+
+| Flag                                 | Default           | Effect                                                                                             |
+| ------------------------------------ | ----------------- | ------------------------------------------------------------------------------------------------- |
+| `--base <ref>`                       | auto              | Review the branch diff `<ref>...HEAD` (merge-base) instead of the working tree.                    |
+| `--scope auto\|working-tree\|branch` | `auto`            | Force the target. `working-tree` = uncommitted changes; `branch` = vs the detected default branch. |
+| `--adversarial`                      | off               | Challenge the design and assumptions, not just implementation defects.                             |
+| `--model <id>`                       | `auto`            | Same aliases as `/cursor:delegate`. Use `gpt`/`opus`/`gemini` for a deeper review.                 |
+| `--background`                       | off               | Detach; returns a job id immediately. Read it later with `/cursor:result`.                         |
+| `--wait`                             | on                | Block until the review finishes (default unless `--background`).                                   |
+| `--timeout <sec>`                    | `1800`            | Kill the review if it exceeds this.                                                                |
+| `--no-git-check`                     | off               | Allow running outside a git repo (rarely useful — there is no diff to review).                     |
+
+Examples:
+
+```
+/cursor:review                                  # review the current working-tree diff
+/cursor:review --base main                      # review this branch vs main
+/cursor:review --scope branch --model gpt       # branch diff, deeper model
+/cursor:review --adversarial "is the retry/backoff design sound under load?"
+/cursor:review --background --model opus         # detach; /cursor:result when ready
+```
+
+This is a **second opinion**, not a replacement for Claude reviewing the diff in-session. Reach for it when you want a different model's eyes on the change, or to offload a large review while Claude keeps orchestrating.
 
 ### `/cursor:browser <url> <what to verify...>`
 

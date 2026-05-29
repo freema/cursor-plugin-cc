@@ -1,0 +1,3 @@
+{"type":"system","subtype":"init","session_id":"chat_review_001","cwd":"/tmp/repo"}
+{"type":"assistant","message":{"text":"Reviewing the working tree diff."}}
+{"type":"result","subtype":"success","chat_id":"chat_review_001","result":"## Blocking\n(none)\n\n## Should-fix\n- src/foo.ts:1 — magic number 42 should be a named constant.\n\n## Nits\n(none)\n\nAPPROVE WITH NITS"}

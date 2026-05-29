@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Added
+
+- **`/cursor:review`** — read-only code review of your git diff by a Cursor model, modelled on `openai/codex-plugin-cc`'s `/codex:review`. The plugin collects the diff itself (working tree, or branch vs a `--base <ref>`), embeds it in a strict review-only prompt, runs `cursor-agent` over it, and returns the findings (Blocking / Should-fix / Nits + verdict) verbatim. Supports `--scope auto|working-tree|branch`, `--adversarial` (challenge the design), `--model`, `--background`/`--wait`, `--timeout`, and free-form focus text. Tracked as a normal job, so `/cursor:status`, `/cursor:result`, and `/cursor:cancel` apply. A post-flight check marks the job `failed` if the run touches the working tree, so a review can never silently become an edit. New `collectReviewContext` helpers in `scripts/lib/git.mjs`.
+
 ## 0.2.2 — resume bug fix + safer default model
 
 ### Fixed

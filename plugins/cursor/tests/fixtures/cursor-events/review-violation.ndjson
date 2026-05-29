@@ -1,0 +1,5 @@
+{"type":"system","subtype":"init","session_id":"chat_review_002","cwd":"/tmp/repo"}
+{"type":"assistant","message":{"text":"I will just fix it directly."}}
+{"type":"tool_use","name":"edit","input":{"file_path":"src/foo.ts","old":"42","new":"FOO"}}
+{"type":"tool_result","tool_use_id":"1","is_error":false,"content":"ok"}
+{"type":"result","subtype":"success","chat_id":"chat_review_002","result":"Fixed the magic number."}
