@@ -73,6 +73,19 @@ describe('delegate foreground', () => {
     }
   });
 
+  // Regression: a numeric `--resume=<id>` used to crash with
+  // `resume.trim is not a function` because the parser auto-cast it to a number.
+  it('does not crash on a numeric --resume id', async () => {
+    const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    try {
+      const code = await delegateMain(['--no-git-check', '--resume=12345', '--', 'follow up']);
+      expect(code).toBe(0);
+    } finally {
+      writeSpy.mockRestore();
+    }
+    expect(listJobs(tmp.dir).length).toBe(1);
+  });
+
   // Regression: `/cursor:resume <multi-word prompt>` used to send the first
   // prompt word as the chat-id because `--resume` greedily consumed it.
   it('resume.mjs preserves a multi-word non-ASCII prompt', async () => {

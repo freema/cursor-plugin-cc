@@ -80,6 +80,41 @@ function pickString(obj, keys) {
 }
 
 /**
+ * Extract human-readable text from a value that may be a plain string, an
+ * Anthropic-style `content[]` array of `{type:'text', text}` blocks, or an
+ * object carrying either under common keys. Returns undefined when empty.
+ *
+ * @param {unknown} value
+ * @returns {string|undefined}
+ */
+export function pickText(value) {
+  if (typeof value === 'string') return value.length > 0 ? value : undefined;
+  if (Array.isArray(value)) {
+    const parts = [];
+    for (const item of value) {
+      if (typeof item === 'string') parts.push(item);
+      else if (
+        item != null &&
+        typeof item === 'object' &&
+        (item.type === 'text' || item.type === undefined) &&
+        typeof item.text === 'string'
+      ) {
+        parts.push(item.text);
+      }
+    }
+    const joined = parts.join('');
+    return joined.length > 0 ? joined : undefined;
+  }
+  if (value != null && typeof value === 'object') {
+    for (const k of ['result', 'text', 'content', 'message']) {
+      const t = pickText(value[k]);
+      if (t) return t;
+    }
+  }
+  return undefined;
+}
+
+/**
  * Yield every `{type: 'tool_use', name: …}` object anywhere in the tree.
  *
  * @param {unknown} node
@@ -135,9 +170,7 @@ export function summariseEvents(events) {
     }
     const type = ev.type;
     if (type === 'result') {
-      const text =
-        pickString(ev, ['result', 'text', 'message', 'content']) ??
-        pickString(ev.message, ['text', 'content']);
+      const text = pickText(ev) ?? pickText(ev.message);
       if (text) finalText = text;
       const subtype = typeof ev.subtype === 'string' ? ev.subtype : undefined;
       const isError = ev.is_error === true || ev.error != null;
@@ -158,9 +191,7 @@ export function summariseEvents(events) {
       if (!ev) continue;
       const type = ev.type;
       if (type === 'assistant' || type === 'message') {
-        const text =
-          pickString(ev, ['text', 'content', 'message']) ??
-          pickString(ev.message, ['text', 'content']);
+        const text = pickText(ev) ?? pickText(ev.message);
         if (text) {
           finalText = text;
           break;

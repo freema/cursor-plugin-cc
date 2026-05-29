@@ -1,13 +1,13 @@
 #!/usr/bin/env node
-import { collapseArguments, parseArgv } from './lib/args.mjs';
+import { collapseCommandArgv, parseArgv, parseTimeout } from './lib/args.mjs';
 import { listConfiguredMcps, resolveModel, runHeadless } from './lib/cursor.mjs';
 import { isGitRepo, repoRoot } from './lib/git.mjs';
 import { id as newId } from './lib/id.mjs';
 import { createJob, rawLogPath as rawLogPathFor, updateJob } from './lib/jobs.mjs';
 import { ensureDir, jobsDir, logsDir } from './lib/paths.mjs';
-import { extractChatId, summariseEvents } from './lib/parse.mjs';
+import { extractChatId, summariseEvents, walkToolUses } from './lib/parse.mjs';
 
-const BOOLEAN_FLAGS = ['background', 'fresh', 'force', 'git-check', 'skip-mcp-check', 'help'];
+const BOOLEAN_FLAGS = ['fresh', 'force', 'git-check', 'skip-mcp-check', 'help'];
 const MCP_NAME = 'chrome-devtools';
 
 function buildBrowserPrompt(url, what) {
@@ -43,36 +43,14 @@ function buildBrowserPrompt(url, what) {
   ].join('\n');
 }
 
-// Walks an event tree and yields every `tool_use` block it finds. Cursor's
-// stream-json usually nests tool calls inside `assistant.message.content[]`
-// (matching the Anthropic Messages API), but different models / versions may
-// emit them at the top level, inside `tool`, or inside `tool_use`. We recurse
-// so we don't care about the exact path.
-function* extractToolUses(node) {
-  if (node == null || typeof node !== 'object') return;
-  if (Array.isArray(node)) {
-    for (const item of node) yield* extractToolUses(item);
-    return;
-  }
-  const type = node.type;
-  const name = typeof node.name === 'string' ? node.name : undefined;
-  if ((type === 'tool_use' || type === 'tool_call') && name) {
-    yield {
-      name,
-      input: node.input ?? node.arguments ?? node.params ?? node.tool_input,
-    };
-  }
-  for (const v of Object.values(node)) yield* extractToolUses(v);
-}
-
 function usedBrowserMcp(events) {
   for (const ev of events) {
-    for (const tu of extractToolUses(ev)) {
+    for (const tu of walkToolUses(ev)) {
       const name = tu.name.toLowerCase();
       if (
         name.includes('chrome') ||
         name.includes('devtools') ||
-        name.startsWith('mcp_') ||
+        name.startsWith('mcp_chrome-devtools') ||
         name.includes('take_snapshot') ||
         name.includes('navigate_page') ||
         name.includes('list_pages') ||
@@ -92,7 +70,7 @@ function usedBrowserMcp(events) {
 function usedBannedHttpClient(events) {
   const hits = new Set();
   for (const ev of events) {
-    for (const tu of extractToolUses(ev)) {
+    for (const tu of walkToolUses(ev)) {
       const name = tu.name.toLowerCase();
       if (name === 'bash' || name === 'shell' || name.includes('terminal') || name === 'exec') {
         const cmd = tu.input && typeof tu.input === 'object' ? String(tu.input.command ?? '') : '';
@@ -120,7 +98,6 @@ function normaliseUrl(raw) {
 
 function parseFlags(argv) {
   const { positional, flags } = parseArgv(argv, BOOLEAN_FLAGS);
-  const background = Boolean(flags['background']);
   const fresh = Boolean(flags['fresh']);
   const explicitForce = 'force' in flags ? Boolean(flags['force']) : undefined;
   const force = explicitForce === undefined ? true : explicitForce;
@@ -133,9 +110,7 @@ function parseFlags(argv) {
     flags['skip-mcp-check'] === true ||
     flags['skipMcpCheck'] === true ||
     flags['mcpCheck'] === false;
-  const timeoutRaw = flags['timeout'];
-  const timeout =
-    typeof timeoutRaw === 'number' ? timeoutRaw : timeoutRaw ? Number(timeoutRaw) : 1800;
+  const timeout = parseTimeout(flags['timeout']);
   const model = typeof flags['model'] === 'string' ? flags['model'] : undefined;
   let url;
   let descTokens = [];
@@ -150,7 +125,6 @@ function parseFlags(argv) {
     url,
     description,
     model,
-    background,
     fresh,
     force,
     noGitCheck,
@@ -186,12 +160,7 @@ async function preflightMcp() {
  * @returns {Promise<number>}
  */
 export async function main(rawArgv) {
-  const delimiterIdx = rawArgv.indexOf('--');
-  const firstHalf = delimiterIdx === -1 ? [] : rawArgv.slice(0, delimiterIdx);
-  const userRaw =
-    delimiterIdx === -1 ? rawArgv.join(' ') : rawArgv.slice(delimiterIdx + 1).join(' ');
-  const combined = [...firstHalf, ...collapseArguments(userRaw)];
-  const flags = parseFlags(combined);
+  const flags = parseFlags(collapseCommandArgv(rawArgv));
   if (flags.description.length === 0) {
     process.stderr.write(
       'Error: no test description. Usage: `/cursor:browser [<url>] <what to verify...>`. URL is optional — if omitted, Cursor discovers it from `list_pages` / package.json / common ports. Examples: `/cursor:browser http://localhost:3000 "login flow works"` or `/cursor:browser "check the home page loads without console errors"`.\n',
@@ -247,7 +216,7 @@ export async function main(rawArgv) {
     timeoutSec: flags.timeout,
     logPath,
     onEvent: (ev) => {
-      for (const tu of extractToolUses(ev)) {
+      for (const tu of walkToolUses(ev)) {
         toolCalls += 1;
         if (toolCalls <= 30) {
           const short = tu.name.replace(/^mcp_chrome-devtools_/, 'cdt:');
@@ -268,6 +237,12 @@ export async function main(rawArgv) {
   let status = result.exitCode === 0 && summary.success ? 'done' : 'failed';
   const warnings = [];
 
+  if (result.killed) {
+    status = 'failed';
+    warnings.push(
+      'The run was killed (timeout or post-result watchdog) before it finished — this report may be incomplete. Re-run with a larger `--timeout` if the page is slow.',
+    );
+  }
   if (!mcpUsed && hadBrowserTools) {
     status = 'failed';
     warnings.push(

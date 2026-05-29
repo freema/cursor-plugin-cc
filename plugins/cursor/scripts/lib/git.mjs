@@ -34,9 +34,17 @@ export async function repoRoot(cwd = process.cwd()) {
 
 const MAX_DIFF_BYTES = 256 * 1024;
 const MAX_UNTRACKED_BYTES = 32 * 1024;
+// The well-known SHA of git's empty tree — diffing against it makes a repo
+// with no commits (no resolvable HEAD) show its staged files as additions.
+const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
 
 function git(cwd, args) {
   return run('git', args, { cwd, timeoutMs: 15_000 });
+}
+
+async function diffBase(cwd) {
+  const res = await git(cwd, ['rev-parse', '--verify', '--quiet', 'HEAD']);
+  return res.exitCode === 0 && res.stdout.trim() ? 'HEAD' : EMPTY_TREE;
 }
 
 /**
@@ -177,6 +185,9 @@ export async function collectReviewContext(cwd, opts = {}) {
 
   let mode;
   let baseRef = base;
+  // Reused below for working-tree mode so we don't run `git diff`/`ls-files`
+  // a second time on the common auto+dirty path.
+  let st;
   if (base) {
     mode = 'branch';
   } else if (scope === 'working-tree') {
@@ -185,7 +196,7 @@ export async function collectReviewContext(cwd, opts = {}) {
     mode = 'branch';
     baseRef = await detectDefaultBranch(cwd);
   } else {
-    const st = await workingTreeStatus(cwd);
+    st = await workingTreeStatus(cwd);
     if (st.isDirty) {
       mode = 'working-tree';
     } else {
@@ -201,22 +212,23 @@ export async function collectReviewContext(cwd, opts = {}) {
   }
 
   if (mode === 'working-tree') {
-    const st = await workingTreeStatus(cwd);
+    if (!st) st = await workingTreeStatus(cwd);
     const changedFiles = [...new Set([...st.staged, ...st.unstaged, ...st.untracked])].sort();
     if (!st.isDirty) {
       return { mode, label: `working tree on ${branch}`, changedFiles: [], isEmpty: true };
     }
+    const ref = await diffBase(cwd);
     const status = (await git(cwd, ['status', '--short', '--untracked-files=all'])).stdout.trim();
-    const stat = (await git(cwd, ['diff', '--stat', 'HEAD'])).stdout.trim();
+    const stat = (await git(cwd, ['diff', '--stat', ref])).stdout.trim();
     const { text: diff, truncated } = capDiff(
-      (await git(cwd, ['diff', '--no-ext-diff', 'HEAD'])).stdout,
+      (await git(cwd, ['diff', '--no-ext-diff', ref])).stdout,
       maxDiffBytes,
     );
     const body = [
       section('Status', status),
       section('Diff stat', stat),
       section(
-        'Diff (tracked files vs HEAD)',
+        ref === 'HEAD' ? 'Diff (tracked files vs HEAD)' : 'Diff (tracked files, no commits yet)',
         diff + (truncated ? '\n\n…[diff truncated — inspect the remaining files read-only]…' : ''),
       ),
       section('Untracked files', untrackedSection(cwd, st.untracked)),

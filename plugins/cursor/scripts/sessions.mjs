@@ -2,6 +2,7 @@
 import { listSessions } from './lib/cursor.mjs';
 import { repoRoot } from './lib/git.mjs';
 import { listJobs } from './lib/jobs.mjs';
+import { mdCell } from './lib/md.mjs';
 
 export async function main() {
   const root = await repoRoot(process.cwd());
@@ -10,8 +11,8 @@ export async function main() {
     process.stdout.write('### Cursor sessions for this repository\n\n');
     process.stdout.write('| Chat ID | Updated | Summary |\n| --- | --- | --- |\n');
     for (const s of sessions) {
-      const updated = s.updatedAt ?? '—';
-      const summary = (s.summary ?? '').replace(/\s+/g, ' ').slice(0, 80);
+      const updated = mdCell(s.updatedAt ?? '—');
+      const summary = mdCell(s.summary).slice(0, 80);
       process.stdout.write(`| \`${s.id}\` | ${updated} | ${summary} |\n`);
     }
     process.stdout.write('\nResume any of them with `cursor-agent --resume=<id>`.\n');
@@ -30,8 +31,8 @@ export async function main() {
   );
   for (const j of jobs) {
     const chat = j.cursorChatId ? `\`${j.cursorChatId}\`` : '—';
-    const prompt = j.prompt.replace(/\s+/g, ' ').slice(0, 60);
-    process.stdout.write(`| \`${j.id}\` | ${j.status} | ${chat} | ${prompt} |\n`);
+    const prompt = mdCell(j.prompt).slice(0, 60);
+    process.stdout.write(`| \`${j.id}\` | ${mdCell(j.status)} | ${chat} | ${prompt} |\n`);
   }
   return 0;
 }

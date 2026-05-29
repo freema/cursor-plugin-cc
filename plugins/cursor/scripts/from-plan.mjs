@@ -17,9 +17,9 @@
 import { existsSync, writeFileSync } from 'node:fs';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { collapseArguments, parseArgv } from './lib/args.mjs';
+import { collapseCommandArgv, parseArgv, parseTimeout } from './lib/args.mjs';
 import { main as delegateMain } from './delegate.mjs';
-import { repoRoot } from './lib/git.mjs';
+import { isGitRepo, repoRoot } from './lib/git.mjs';
 import { buildTaskContent, listPlans, parsePlanFile, resolvePlanPath } from './lib/plan.mjs';
 import { invokedAsScript as __isScript } from './lib/invoked.mjs';
 
@@ -44,9 +44,7 @@ function parseFlags(argv) {
     flags['gitCheck'] === false || flags['git-check'] === false || flags['no-git-check'] === true;
   const list = Boolean(flags['list']);
   const model = typeof flags['model'] === 'string' ? flags['model'] : undefined;
-  const timeoutRaw = flags['timeout'];
-  const timeout =
-    typeof timeoutRaw === 'number' ? timeoutRaw : timeoutRaw ? Number(timeoutRaw) : undefined;
+  const timeout = 'timeout' in flags ? parseTimeout(flags['timeout']) : undefined;
   const planRef = positional[0];
   return {
     planRef,
@@ -64,7 +62,7 @@ function parseFlags(argv) {
 function timestamp() {
   const d = new Date();
   const pad = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}`;
+  return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
 }
 
 function renderPlansList() {
@@ -97,7 +95,12 @@ function renderPlansList() {
 function writeTaskFile(root, slug, content) {
   const tasksDir = join(root, 'tasks');
   if (!existsSync(tasksDir)) mkdirSync(tasksDir, { recursive: true });
-  const fullPath = join(tasksDir, `${timestamp()}-${slug}.md`);
+  const stamp = timestamp();
+  // Avoid clobbering a task generated for the same plan in the same second.
+  let fullPath = join(tasksDir, `${stamp}-${slug}.md`);
+  for (let i = 2; existsSync(fullPath); i += 1) {
+    fullPath = join(tasksDir, `${stamp}-${slug}-${i}.md`);
+  }
   writeFileSync(fullPath, content, 'utf8');
   return { fullPath };
 }
@@ -107,12 +110,7 @@ function writeTaskFile(root, slug, content) {
  * @returns {Promise<number>}
  */
 export async function main(rawArgv) {
-  const delimiterIdx = rawArgv.indexOf('--');
-  const firstHalf = delimiterIdx === -1 ? [] : rawArgv.slice(0, delimiterIdx);
-  const userRaw =
-    delimiterIdx === -1 ? rawArgv.join(' ') : rawArgv.slice(delimiterIdx + 1).join(' ');
-  const combined = [...firstHalf, ...collapseArguments(userRaw)];
-  const flags = parseFlags(combined);
+  const flags = parseFlags(collapseCommandArgv(rawArgv));
 
   if (flags.list) {
     process.stdout.write(renderPlansList());
@@ -135,6 +133,17 @@ export async function main(rawArgv) {
 
   const plan = parsePlanFile(planPath);
   const root = await repoRoot(process.cwd());
+
+  // If we're going to hand off to Cursor (which refuses outside a git repo),
+  // fail BEFORE writing the task file so we don't leave an orphan task file and
+  // a success banner behind an aborted delegate.
+  if (flags.shouldDelegate && !flags.noGitCheck && !(await isGitRepo(process.cwd()))) {
+    process.stderr.write(
+      'Error: current directory is not a git repository, so --delegate cannot run. Re-run without --delegate to just write the task file, or pass --no-git-check.\n',
+    );
+    return 2;
+  }
+
   const taskContent = buildTaskContent(plan);
   const { fullPath } = writeTaskFile(root, plan.slug, taskContent);
   const relPath = fullPath.startsWith(root + '/') ? fullPath.slice(root.length + 1) : fullPath;

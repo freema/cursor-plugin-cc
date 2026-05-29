@@ -33,7 +33,9 @@ export function splitArgString(arg) {
       escape = false;
       continue;
     }
-    if (ch === '\\') {
+    // Inside single quotes everything is literal (POSIX semantics): a
+    // backslash is NOT an escape character there.
+    if (ch === '\\' && quote !== "'") {
       escape = true;
       continue;
     }
@@ -58,6 +60,8 @@ export function splitArgString(arg) {
     }
     cur += ch;
   }
+  // A trailing lone backslash is a literal backslash, not a dropped escape.
+  if (escape) cur += '\\';
   if (cur.length > 0) out.push(cur);
   return out;
 }
@@ -85,7 +89,9 @@ function autoCast(value) {
   if (value === '') return value;
   if (/^-?\d+(\.\d+)?$/.test(value)) {
     const n = Number(value);
-    if (Number.isFinite(n)) return n;
+    // Only cast when the number round-trips exactly — otherwise a large id
+    // like 12345678901234567890 would lose precision and stop matching.
+    if (Number.isFinite(n) && String(n) === value) return n;
   }
   return value;
 }
@@ -142,10 +148,11 @@ export function parseArgv(argv, booleans = []) {
       inlineValue = rest.slice(eq + 1);
       rest = rest.slice(0, eq);
     }
-    // --no-foo → negation
+    // --no-foo → negation, but only the bare form: `--no-foo=value` keeps its
+    // explicit value rather than being silently discarded.
     let negated = false;
     let name = rest;
-    if (name.startsWith('no-')) {
+    if (name.startsWith('no-') && inlineValue === undefined) {
       negated = true;
       name = name.slice(3);
     }
@@ -174,4 +181,47 @@ export function parseArgv(argv, booleans = []) {
     setFlag(name, autoCast(next));
   }
   return { positional, flags };
+}
+
+/**
+ * Apply the shared slash-command argv prologue: everything before a `--`
+ * delimiter is taken verbatim, everything after it is re-split with quote
+ * handling (Claude Code passes the user's text as one `"$ARGUMENTS"` string).
+ * Returns the combined token array ready for `parseArgv`.
+ *
+ * @param {string[]} rawArgv
+ * @returns {string[]}
+ */
+export function collapseCommandArgv(rawArgv) {
+  const delimiterIdx = rawArgv.indexOf('--');
+  const firstHalf = delimiterIdx === -1 ? [] : rawArgv.slice(0, delimiterIdx);
+  const userRaw =
+    delimiterIdx === -1 ? rawArgv.join(' ') : rawArgv.slice(delimiterIdx + 1).join(' ');
+  return [...firstHalf, ...collapseArguments(userRaw)];
+}
+
+/**
+ * Convenience wrapper: collapse the command argv then parse it.
+ *
+ * @param {string[]} rawArgv
+ * @param {string[]} [booleans]
+ * @returns {ParsedArgs}
+ */
+export function parseCommandArgv(rawArgv, booleans = []) {
+  return parseArgv(collapseCommandArgv(rawArgv), booleans);
+}
+
+/**
+ * Normalise a `--timeout` flag value (which may be a number, a numeric string,
+ * or junk) into a positive integer number of seconds, falling back to
+ * `fallback` for anything non-finite or ≤ 0. Prevents `--timeout abc` → `NaN`
+ * silently disabling the watchdog (`NaN > 0` is false, so no timer arms).
+ *
+ * @param {unknown} raw
+ * @param {number} [fallback]
+ * @returns {number}
+ */
+export function parseTimeout(raw, fallback = 1800) {
+  const n = typeof raw === 'number' ? raw : raw == null || raw === '' ? NaN : Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
 }

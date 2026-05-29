@@ -1,7 +1,8 @@
 #!/usr/bin/env node
-import { collapseArguments, parseArgv } from './lib/args.mjs';
+import { parseCommandArgv } from './lib/args.mjs';
 import { repoRoot } from './lib/git.mjs';
 import { listJobs, readJob } from './lib/jobs.mjs';
+import { mdCell } from './lib/md.mjs';
 
 function age(iso) {
   const ms = Date.now() - new Date(iso).getTime();
@@ -16,7 +17,7 @@ function age(iso) {
 }
 
 function truncate(s, n) {
-  const clean = s.replace(/\s+/g, ' ').trim();
+  const clean = mdCell(s);
   return clean.length > n ? `${clean.slice(0, n - 1)}…` : clean;
 }
 
@@ -27,7 +28,7 @@ function renderTable(rows) {
   const body = rows
     .map(
       (r) =>
-        `| \`${r.id}\` | ${r.status} | ${r.model} | ${age(r.startedAt)} | ${truncate(
+        `| \`${r.id}\` | ${mdCell(r.status)} | ${mdCell(r.model)} | ${age(r.startedAt)} | ${truncate(
           r.prompt,
           60,
         )} |`,
@@ -75,12 +76,7 @@ function renderDetail(r) {
  * @returns {Promise<number>}
  */
 export async function main(rawArgv) {
-  const delimiterIdx = rawArgv.indexOf('--');
-  const firstHalf = delimiterIdx === -1 ? [] : rawArgv.slice(0, delimiterIdx);
-  const userRaw =
-    delimiterIdx === -1 ? rawArgv.join(' ') : rawArgv.slice(delimiterIdx + 1).join(' ');
-  const combined = [...firstHalf, ...collapseArguments(userRaw)];
-  const { positional, flags } = parseArgv(combined, ['all']);
+  const { positional, flags } = parseCommandArgv(rawArgv, ['all']);
   const root = await repoRoot(process.cwd());
   const id = positional[0];
   if (id) {

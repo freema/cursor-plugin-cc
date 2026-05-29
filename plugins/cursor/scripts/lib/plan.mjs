@@ -24,6 +24,18 @@ import { join, resolve } from 'node:path';
 export const PLANS_DIR = join(homedir(), '.claude', 'plans');
 
 /**
+ * @param {string} p
+ * @returns {boolean}
+ */
+function isFile(p) {
+  try {
+    return statSync(p).isFile();
+  } catch {
+    return false;
+  }
+}
+
+/**
  * @typedef {Object} ParsedPlan
  * @property {string} path                Absolute path to the source plan file.
  * @property {string} title               First `# ` heading text. May be empty.
@@ -68,17 +80,18 @@ export function resolvePlanPath(ref, plansDir = PLANS_DIR) {
     const latest = listPlans(plansDir)[0];
     return latest?.path;
   }
-  // Absolute path.
+  // Absolute path. Only accept an actual file — a directory would crash
+  // parsePlanFile with EISDIR.
   if (ref.startsWith('/') || /^[A-Za-z]:/.test(ref)) {
-    return existsSync(ref) ? resolve(ref) : undefined;
+    return isFile(ref) ? resolve(ref) : undefined;
   }
   // Relative path from CWD.
   const fromCwd = resolve(process.cwd(), ref);
-  if (existsSync(fromCwd) && !fromCwd.endsWith('/')) return fromCwd;
+  if (isFile(fromCwd)) return fromCwd;
   // Filename inside plans dir (with or without .md).
   const candidates = [join(plansDir, ref), join(plansDir, ref.endsWith('.md') ? ref : `${ref}.md`)];
   for (const c of candidates) {
-    if (existsSync(c)) return c;
+    if (isFile(c)) return c;
   }
   // Substring match against plan names.
   const needle = ref.toLowerCase();
@@ -108,17 +121,27 @@ export function splitSections(content) {
     }
     buffer = [];
   };
+  let inFence = false;
   for (const line of lines) {
-    const h1 = /^#\s+(.+?)\s*$/.exec(line);
-    if (h1 && !title) {
-      title = h1[1].trim();
+    // Track fenced code blocks so a `## ` / `# ` line *inside* an embedded
+    // diff or snippet isn't mistaken for a section heading.
+    if (/^\s*(```|~~~)/.test(line)) {
+      inFence = !inFence;
+      buffer.push(line);
       continue;
     }
-    const h2 = /^##\s+(.+?)\s*$/.exec(line);
-    if (h2) {
-      flush();
-      currentKey = h2[1].trim().toLowerCase();
-      continue;
+    if (!inFence) {
+      const h1 = /^#\s+(.+?)\s*$/.exec(line);
+      if (h1 && !title) {
+        title = h1[1].trim();
+        continue;
+      }
+      const h2 = /^##\s+(.+?)\s*$/.exec(line);
+      if (h2) {
+        flush();
+        currentKey = h2[1].trim().toLowerCase();
+        continue;
+      }
     }
     buffer.push(line);
   }
@@ -177,8 +200,12 @@ const SECTION_HINTS = {
  */
 export function pickSection(sections, intent) {
   const hints = SECTION_HINTS[intent];
-  for (const key of Object.keys(sections)) {
-    for (const hint of hints) {
+  const keys = Object.keys(sections);
+  // Hints are ordered most- to least-specific; iterate them in the OUTER loop
+  // so a specific hint (e.g. "files to touch") beats a generic one
+  // (e.g. bare "files") even when the generic heading appears earlier.
+  for (const hint of hints) {
+    for (const key of keys) {
       if (key === hint || key.startsWith(`${hint}:`) || key.startsWith(`${hint} `)) {
         return sections[key];
       }

@@ -2,7 +2,7 @@
 import { spawn } from 'node:child_process';
 import { openSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { collapseArguments, parseArgv } from './lib/args.mjs';
+import { collapseCommandArgv, parseArgv, parseTimeout } from './lib/args.mjs';
 import { resolveModel, runHeadless } from './lib/cursor.mjs';
 import { collectReviewContext, isGitRepo, repoRoot } from './lib/git.mjs';
 import { id as newId } from './lib/id.mjs';
@@ -33,9 +33,7 @@ function parseFlags(argv) {
     typeof flags['scope'] === 'string' ? flags['scope'].trim().toLowerCase() : 'auto';
   const scope = ['auto', 'working-tree', 'branch'].includes(scopeRaw) ? scopeRaw : 'auto';
   const model = typeof flags['model'] === 'string' ? flags['model'] : undefined;
-  const timeoutRaw = flags['timeout'];
-  const timeout =
-    typeof timeoutRaw === 'number' ? timeoutRaw : timeoutRaw ? Number(timeoutRaw) : 1800;
+  const timeout = parseTimeout(flags['timeout']);
   const worker = typeof flags['worker'] === 'string' ? flags['worker'] : undefined;
   const focus = positional.join(' ').trim();
   return { focus, model, background, wait, adversarial, base, scope, timeout, noGitCheck, worker };
@@ -182,16 +180,18 @@ async function foreground(flags, context, jobId, root) {
   return result.exitCode;
 }
 
-function spawnBackground(jobId, argv) {
+function spawnBackground(jobId, argv, root) {
   const selfPath = fileURLToPath(import.meta.url);
-  const logPath = rawLogPathFor(process.cwd(), jobId);
-  ensureDir(logsDir(process.cwd()));
+  // Base capture logs on the resolved repo root so they share the job's
+  // jobs/<repo-hash>/ dir, and forward that root to the worker.
+  const logPath = rawLogPathFor(root, jobId);
+  ensureDir(logsDir(root));
   const out = openSync(`${logPath}.stdout`, 'a');
   const err = openSync(`${logPath}.stderr`, 'a');
   const child = spawn(process.execPath, [selfPath, '--worker', jobId, ...argv], {
     detached: true,
     stdio: ['ignore', out, err],
-    env: { ...process.env, CURSOR_PLUGIN_CC_WORKER: '1' },
+    env: { ...process.env, CURSOR_PLUGIN_CC_WORKER: '1', CURSOR_PLUGIN_CC_REPO_ROOT: root },
   });
   child.unref();
   return child.pid ?? -1;
@@ -231,12 +231,7 @@ async function runWorker(jobId, flags, root) {
  * @returns {Promise<number>}
  */
 export async function main(rawArgv) {
-  const delimiterIdx = rawArgv.indexOf('--');
-  const firstHalf = delimiterIdx === -1 ? [] : rawArgv.slice(0, delimiterIdx);
-  const userRaw =
-    delimiterIdx === -1 ? rawArgv.join(' ') : rawArgv.slice(delimiterIdx + 1).join(' ');
-  const combined = [...firstHalf, ...collapseArguments(userRaw)];
-  const flags = parseFlags(combined);
+  const flags = parseFlags(collapseCommandArgv(rawArgv));
   // `cursor-agent --force` auto-approves any read tool the reviewer wants to
   // run for extra context; the prompt forbids writes and a post-flight check
   // flags any file the run touched anyway.
@@ -288,7 +283,7 @@ export async function main(rawArgv) {
     forwarded.push('--scope', flags.scope);
     forwarded.push('--timeout', String(flags.timeout));
     if (flags.focus) forwarded.push('--', flags.focus);
-    const pid = spawnBackground(jobId, forwarded);
+    const pid = spawnBackground(jobId, forwarded, root);
     updateJob(root, jobId, { pid });
     process.stdout.write(
       `Review job \`${jobId}\` started in background (model \`${model}\`, pid ${pid}) — ${context.label}.\n`,

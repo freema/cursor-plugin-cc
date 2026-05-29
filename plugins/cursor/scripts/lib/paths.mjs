@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, realpathSync } from 'node:fs';
+import { mkdirSync, realpathSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 
@@ -15,7 +15,16 @@ export function pluginHome() {
  * @returns {string}
  */
 export function repoHash(repoRoot) {
-  const canonical = existsSync(repoRoot) ? realpathSync(repoRoot) : resolve(repoRoot);
+  // Always canonicalise the same way so a repo maps to ONE hash regardless of
+  // whether the path currently exists or contains a symlinked component
+  // (e.g. macOS `/tmp` → `/private/tmp`). `realpathSync` throws when the path
+  // is gone, so fall back to a plain resolve.
+  let canonical;
+  try {
+    canonical = realpathSync(repoRoot);
+  } catch {
+    canonical = resolve(repoRoot);
+  }
   return createHash('sha256').update(canonical).digest('hex').slice(0, 12);
 }
 

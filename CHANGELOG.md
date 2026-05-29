@@ -4,11 +4,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## 0.3.0 — /cursor:review + codebase hardening
 
 ### Added
 
 - **`/cursor:review`** — read-only code review of your git diff by a Cursor model, modelled on `openai/codex-plugin-cc`'s `/codex:review`. The plugin collects the diff itself (working tree, or branch vs a `--base <ref>`), embeds it in a strict review-only prompt, runs `cursor-agent` over it, and returns the findings (Blocking / Should-fix / Nits + verdict) verbatim. Supports `--scope auto|working-tree|branch`, `--adversarial` (challenge the design), `--model`, `--background`/`--wait`, `--timeout`, and free-form focus text. Tracked as a normal job, so `/cursor:status`, `/cursor:result`, and `/cursor:cancel` apply. A post-flight check marks the job `failed` if the run touches the working tree, so a review can never silently become an edit. New `collectReviewContext` helpers in `scripts/lib/git.mjs`.
+
+### Fixed
+
+A full multi-agent review of the codebase (dogfooding `/cursor:review`) surfaced a batch of robustness issues, now fixed:
+
+- **`delegate.mjs`** — a numeric `--resume=<id>` no longer crashes with `resume.trim is not a function` (the parser auto-cast it to a number). `--wait` is now a real toggle (forces the foreground even with `--background`). The background worker receives the prompt verbatim via env instead of re-collapsing it (which mangled quotes/backslashes), and its capture logs now land in the correct `jobs/<repo-hash>/` dir. A timed-out/watchdog-killed run is reported as `failed` with a note.
+- **`cursor.mjs`** — `runHeadless` no longer crashes the process when the child fails to spawn (missing/non-executable binary) or when the log stream errors (ENOSPC/EACCES); both are handled and the run degrades gracefully. The post-result kill watchdog arms at most once. `CURSOR_AGENT_BIN` is trimmed before use.
+- **`git.mjs`** — review of a repo with no commits now diffs against the empty-tree object instead of silently showing nothing; the working-tree status is collected once on the common path.
+- **`paths.mjs`** — `repoHash` canonicalises the path the same way whether or not it exists, so a repo maps to a single jobs dir (fixes the macOS `/tmp`→`/private/tmp` split and a possible throw).
+- **`parse.mjs`** — text extraction now flattens Anthropic `content[]` arrays, so output is captured even when a run is killed before the final `result` event.
+- **`plan.mjs`** — `resolvePlanPath` rejects directories (was crashing with EISDIR); `## ` headings inside fenced code blocks are no longer mistaken for section headings; specific section hints (e.g. "files to touch") now beat generic ones ("files") regardless of document order.
+- **`jobs.mjs`** — `atomicWrite` cleans up its temp file on a failed rename; a cancelled job is not resurrected to `done`/`failed` by a finishing background worker.
+- **`args.mjs`** — `--no-foo=value` keeps its explicit value; backslashes inside single quotes and a trailing lone backslash are preserved (POSIX); integers beyond `MAX_SAFE_INTEGER` stay strings instead of losing precision. New shared `parseTimeout` (a non-numeric `--timeout` no longer silently disables the watchdog), `collapseCommandArgv`, and `parseCommandArgv` helpers de-duplicate the per-command argv prologue.
+- **`browser.mjs`** — drops the never-honored `--background` flag; the MCP-usage gate matches `chrome-devtools` specifically instead of any `mcp_*`; killed runs are flagged.
+- **`status.mjs` / `sessions.mjs`** — Markdown table cells escape `|` and tolerate records missing `prompt`/`model` (one bad record no longer aborts the whole listing) via the new `lib/md.mjs` helper.
+- **`result.mjs`** — coerces non-string `summary`/`prompt`/`model` from a corrupted record instead of throwing.
+- **`setup.mjs`** — `--doctor`'s "all checks passed" no longer masks a real failure whose detail happens to contain "not set".
+- **`cancel.mjs`** — distinguishes a real cancellation from a no-op on an already-finished job.
+- **`id.mjs`** — keeps the full base64url alphabet (filesystem-safe) instead of stripping then zero-padding, which shortened ids and biased the final character.
 
 ## 0.2.2 — resume bug fix + safer default model
 

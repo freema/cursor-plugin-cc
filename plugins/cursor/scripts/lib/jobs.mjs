@@ -62,7 +62,17 @@ export function rawLogPath(repoPath, id) {
 function atomicWrite(target, data) {
   const tmp = `${target}.tmp-${process.pid}-${Date.now()}`;
   writeFileSync(tmp, data, 'utf8');
-  renameSync(tmp, target);
+  try {
+    renameSync(tmp, target);
+  } catch (err) {
+    // Don't leave the temp file behind if the rename fails.
+    try {
+      unlinkSync(tmp);
+    } catch {
+      // noop
+    }
+    throw err;
+  }
 }
 
 /**
@@ -116,6 +126,12 @@ export function updateJob(repoPath, id, patch) {
   const existing = readJob(repoPath, id);
   if (!existing) return null;
   const merged = { ...existing, ...patch };
+  // Read-modify-write is last-writer-wins; the one race we actively guard is a
+  // background worker finishing (status → done/failed) AFTER the user cancelled
+  // the job. A cancellation is terminal and must not be silently overwritten.
+  if (existing.status === 'cancelled' && patch.status && patch.status !== 'cancelled') {
+    merged.status = 'cancelled';
+  }
   atomicWrite(jobFilePath(repoPath, id), JSON.stringify(merged, null, 2));
   return merged;
 }
@@ -134,7 +150,7 @@ export function updateJob(repoPath, id, patch) {
 export function listJobs(repoPath, opts = {}) {
   const dir = jobsDir(repoPath);
   if (!existsSync(dir)) return [];
-  const files = readdirSync(dir).filter((f) => f.endsWith('.json') && !f.endsWith('.tmp'));
+  const files = readdirSync(dir).filter((f) => f.endsWith('.json') && !f.includes('.tmp-'));
   /** @type {JobRecord[]} */
   const records = [];
   for (const f of files) {
@@ -208,6 +224,10 @@ export async function cancelJob(repoPath, id, graceMs = 5_000) {
   const job = readJob(repoPath, id);
   if (!job) return null;
   if (job.status !== 'running') return job;
+  // NOTE: PIDs are recycled by the OS. If the original process already exited
+  // and its PID was reused, the signals below could hit an unrelated process.
+  // The job dir is short-lived and pruned after 30 days, so we accept this
+  // rather than track a process-group / start-time identity cross-platform.
   if (typeof job.pid === 'number' && isProcessAlive(job.pid)) {
     try {
       process.kill(job.pid, 'SIGTERM');

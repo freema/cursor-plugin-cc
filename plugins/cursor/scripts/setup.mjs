@@ -2,7 +2,7 @@
 import { accessSync, constants as fsConstants, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { collapseArguments, parseArgv } from './lib/args.mjs';
+import { parseCommandArgv } from './lib/args.mjs';
 import { authStatus, listConfiguredMcps, listModels, resolveBin } from './lib/cursor.mjs';
 import { ensureDir, jobsDir, pluginHome } from './lib/paths.mjs';
 import { run } from './lib/run.mjs';
@@ -103,7 +103,10 @@ async function doctor() {
     }
   }
 
-  const allOk = checks.every(([, r]) => r.ok || r.detail.includes('not set'));
+  // The CURSOR_API_KEY check is already `ok:true` whether or not the key is
+  // set, so a literal `r.ok` is correct here — a stray "not set" substring in
+  // some other check's stderr must not mask a real failure.
+  const allOk = checks.every(([, r]) => r.ok);
   lines.push('');
   lines.push(allOk ? 'All checks passed.' : 'Some checks failed — see above.');
   process.stdout.write(lines.join('\n') + '\n');
@@ -167,12 +170,7 @@ async function baseCheck() {
  * @returns {Promise<number>}
  */
 export async function main(rawArgv) {
-  const delimiterIdx = rawArgv.indexOf('--');
-  const firstHalf = delimiterIdx === -1 ? [] : rawArgv.slice(0, delimiterIdx);
-  const userRaw =
-    delimiterIdx === -1 ? rawArgv.join(' ') : rawArgv.slice(delimiterIdx + 1).join(' ');
-  const combined = [...firstHalf, ...collapseArguments(userRaw)];
-  const { flags } = parseArgv(combined, ['doctor', 'print-models', 'install']);
+  const { flags } = parseCommandArgv(rawArgv, ['doctor', 'print-models', 'install']);
   if (flags['doctor']) return doctor();
   if (flags['print-models'] || flags['printModels']) return printModels();
   if (flags['install']) return maybeInstall();

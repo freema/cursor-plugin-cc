@@ -2,7 +2,7 @@
 import { spawn } from 'node:child_process';
 import { openSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { collapseArguments, parseArgv } from './lib/args.mjs';
+import { collapseCommandArgv, parseArgv, parseTimeout } from './lib/args.mjs';
 import { resolveModel, runHeadless } from './lib/cursor.mjs';
 import { isGitRepo, repoRoot } from './lib/git.mjs';
 import { id as newId } from './lib/id.mjs';
@@ -28,7 +28,6 @@ const BOOLEAN_FLAGS = [
 
 function parseFlags(argv) {
   const { positional, flags } = parseArgv(argv, BOOLEAN_FLAGS);
-  const background = Boolean(flags['background']);
   const fresh = Boolean(flags['fresh']);
   const cloud = Boolean(flags['cloud']);
   const noGitCheck =
@@ -38,10 +37,12 @@ function parseFlags(argv) {
     flags['noGitCheck'] === true;
   const explicitForceFlag = 'force' in flags ? Boolean(flags['force']) : undefined;
   const force = explicitForceFlag === undefined ? true : explicitForceFlag;
-  const wait = 'wait' in flags ? Boolean(flags['wait']) : !background;
-  const timeoutRaw = flags['timeout'];
-  const timeout =
-    typeof timeoutRaw === 'number' ? timeoutRaw : timeoutRaw ? Number(timeoutRaw) : 1800;
+  // `--wait` forces the foreground even if `--background` is also present,
+  // so it is a real toggle rather than a no-op.
+  const explicitWait = flags['wait'] === true;
+  const background = Boolean(flags['background']) && !explicitWait;
+  const wait = !background;
+  const timeout = parseTimeout(flags['timeout']);
   const resume = flags['resume'];
   const model = typeof flags['model'] === 'string' ? flags['model'] : undefined;
   const worker = typeof flags['worker'] === 'string' ? flags['worker'] : undefined;
@@ -64,17 +65,15 @@ function isResumeRequested(resume, fresh) {
   if (fresh) return false;
   if (resume === undefined) return false;
   if (typeof resume === 'boolean') return resume;
-  return resume.trim().length >= 0;
+  // Any non-boolean value (string id, or a numeric id auto-cast by the parser)
+  // means "resume" — with an explicit chat id when one was supplied.
+  return true;
 }
 
 function resumeChatId(resume) {
-  if (
-    typeof resume === 'string' &&
-    resume.trim().length > 0 &&
-    resume.trim().toLowerCase() !== 'true'
-  ) {
-    return resume.trim();
-  }
+  if (resume == null || typeof resume === 'boolean') return undefined;
+  const s = String(resume).trim();
+  if (s.length > 0 && s.toLowerCase() !== 'true') return s;
   return undefined;
 }
 
@@ -126,19 +125,24 @@ async function foreground(flags, prompt, jobId, root) {
 
   const summary = summariseEvents(result.events);
   const chatId = extractChatId(result.events);
-  const status = result.exitCode === 0 && summary.success ? 'done' : 'failed';
+  const status = result.exitCode === 0 && summary.success && !result.killed ? 'done' : 'failed';
+  const killedNote = result.killed
+    ? '\n\n[plugin post-flight]\nThe run was killed (timeout or watchdog) before finishing — output may be incomplete. Re-run with a larger `--timeout` if needed.'
+    : '';
 
   updateJob(root, jobId, {
     status,
     exitCode: result.exitCode,
     finishedAt: new Date().toISOString(),
-    summary: summary.summary,
+    summary: summary.summary + killedNote,
     filesTouched: summary.filesTouched,
     ...(chatId ? { cursorChatId: chatId } : {}),
   });
 
   process.stdout.write('\n---\n');
   process.stdout.write(`**Status:** ${status}\n`);
+  if (result.killed)
+    process.stdout.write('**⚠ Run was killed before finishing** (timeout/watchdog).\n');
   if (summary.filesTouched.length > 0) {
     process.stdout.write('**Files touched:**\n');
     for (const f of summary.filesTouched) process.stdout.write(`- ${f}\n`);
@@ -156,16 +160,23 @@ async function foreground(flags, prompt, jobId, root) {
   return result.exitCode;
 }
 
-function spawnBackground(jobId, argv) {
+function spawnBackground(jobId, argv, root, extraEnv = {}) {
   const selfPath = fileURLToPath(import.meta.url);
-  const logPath = rawLogPathFor(process.cwd(), jobId);
-  ensureDir(logsDir(process.cwd()));
+  // Base the capture logs on the resolved repo root (not process.cwd()) so they
+  // land in the same jobs/<repo-hash>/ dir as the job record and NDJSON.
+  const logPath = rawLogPathFor(root, jobId);
+  ensureDir(logsDir(root));
   const out = openSync(`${logPath}.stdout`, 'a');
   const err = openSync(`${logPath}.stderr`, 'a');
   const child = spawn(process.execPath, [selfPath, '--worker', jobId, ...argv], {
     detached: true,
     stdio: ['ignore', out, err],
-    env: { ...process.env, CURSOR_PLUGIN_CC_WORKER: '1' },
+    env: {
+      ...process.env,
+      CURSOR_PLUGIN_CC_WORKER: '1',
+      CURSOR_PLUGIN_CC_REPO_ROOT: root,
+      ...extraEnv,
+    },
   });
   child.unref();
   return child.pid ?? -1;
@@ -199,12 +210,15 @@ async function runWorker(jobId, flags, prompt, root) {
   });
   const summary = summariseEvents(result.events);
   const chatId = extractChatId(result.events);
-  const status = result.exitCode === 0 && summary.success ? 'done' : 'failed';
+  const status = result.exitCode === 0 && summary.success && !result.killed ? 'done' : 'failed';
+  const killedNote = result.killed
+    ? '\n\n[plugin post-flight]\nThe run was killed (timeout or watchdog) before finishing — output may be incomplete.'
+    : '';
   updateJob(root, jobId, {
     status,
     exitCode: result.exitCode,
     finishedAt: new Date().toISOString(),
-    summary: summary.summary,
+    summary: summary.summary + killedNote,
     filesTouched: summary.filesTouched,
     ...(chatId ? { cursorChatId: chatId } : {}),
   });
@@ -215,15 +229,12 @@ async function runWorker(jobId, flags, prompt, root) {
  * @returns {Promise<number>}
  */
 export async function main(rawArgv) {
-  const delimiterIdx = rawArgv.indexOf('--');
-  const firstHalf = delimiterIdx === -1 ? [] : rawArgv.slice(0, delimiterIdx);
-  const userRaw =
-    delimiterIdx === -1 ? rawArgv.join(' ') : rawArgv.slice(delimiterIdx + 1).join(' ');
-  const combined = [...firstHalf, ...collapseArguments(userRaw)];
-  const flags = parseFlags(combined);
+  const flags = parseFlags(collapseCommandArgv(rawArgv));
 
   if (flags.worker) {
-    const prompt = flags.positional.join(' ').trim();
+    // The prompt is handed over verbatim via env to avoid a second collapse
+    // pass mangling quotes/backslashes; fall back to positional for safety.
+    const prompt = process.env.CURSOR_PLUGIN_CC_PROMPT ?? flags.positional.join(' ').trim();
     const root = process.env.CURSOR_PLUGIN_CC_REPO_ROOT ?? (await repoRoot(process.cwd()));
     await runWorker(flags.worker, flags, prompt, root);
     return 0;
@@ -264,16 +275,17 @@ export async function main(rawArgv) {
     if (flags.fresh) forwardedArgs.push('--fresh');
     if (flags.cloud) forwardedArgs.push('--cloud');
     if (flags.resume !== undefined) {
-      if (typeof flags.resume === 'string') {
+      if (typeof flags.resume === 'boolean') {
+        if (flags.resume) forwardedArgs.push('--resume');
+      } else {
+        // String or numeric id — String() keeps a numeric id from being dropped.
         forwardedArgs.push(`--resume=${flags.resume}`);
-      } else if (flags.resume) {
-        forwardedArgs.push('--resume');
       }
     }
     if (!flags.force) forwardedArgs.push('--no-force');
     forwardedArgs.push('--timeout', String(flags.timeout));
-    if (prompt) forwardedArgs.push('--', prompt);
-    const pid = spawnBackground(jobId, forwardedArgs);
+    const extraEnv = prompt ? { CURSOR_PLUGIN_CC_PROMPT: prompt } : {};
+    const pid = spawnBackground(jobId, forwardedArgs, root, extraEnv);
     updateJob(root, jobId, { pid });
     process.stdout.write(
       `Job \`${jobId}\` started in background (model \`${model}\`, pid ${pid}).\n`,

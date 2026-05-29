@@ -77,8 +77,8 @@ let cachedBin = null;
  */
 export async function resolveBin() {
   if (cachedBin) return cachedBin;
-  const override = process.env.CURSOR_AGENT_BIN;
-  if (override && override.trim().length > 0) {
+  const override = process.env.CURSOR_AGENT_BIN?.trim();
+  if (override && override.length > 0) {
     cachedBin = override;
     return cachedBin;
   }
@@ -161,6 +161,20 @@ export async function runHeadless(opts) {
   const childStdout = child.stdout;
   const childStderr = child.stderr;
   const logStream = createWriteStream(opts.logPath, { flags: 'a' });
+  // A failed log write (ENOSPC/EACCES/missing dir) must not crash the process
+  // and orphan the running cursor-agent — degrade to in-memory only.
+  let logBroken = false;
+  logStream.on('error', () => {
+    logBroken = true;
+  });
+  const logSafe = (s) => {
+    if (logBroken) return;
+    try {
+      logStream.write(s);
+    } catch {
+      logBroken = true;
+    }
+  };
   /** @type {Record<string, unknown>[]} */
   const events = [];
   let sawResult = false;
@@ -168,13 +182,15 @@ export async function runHeadless(opts) {
 
   const stdoutLines = createInterface({ input: childStdout, crlfDelay: Infinity });
   stdoutLines.on('line', (line) => {
-    logStream.write(line + '\n');
+    logSafe(line + '\n');
     if (opts.onRaw) opts.onRaw(line);
     const ev = parseLine(line);
     if (!ev) return;
     events.push(ev);
     if (opts.onEvent) opts.onEvent(ev);
-    if (ev.type === 'result') {
+    // Arm the post-result watchdog at most once — cursor-agent can emit
+    // several `result` events, and re-arming would stack redundant timers.
+    if (ev.type === 'result' && !sawResult) {
       sawResult = true;
       setTimeout(() => {
         if (!child.killed && child.exitCode === null) {
@@ -200,7 +216,7 @@ export async function runHeadless(opts) {
 
   const stderrLines = createInterface({ input: childStderr, crlfDelay: Infinity });
   stderrLines.on('line', (line) => {
-    logStream.write(`# stderr: ${line}\n`);
+    logSafe(`# stderr: ${line}\n`);
   });
 
   let timeoutHandle;
@@ -225,12 +241,30 @@ export async function runHeadless(opts) {
   }
 
   const exitCode = await new Promise((resolve) => {
+    let settled = false;
+    const done = (code) => {
+      if (settled) return;
+      settled = true;
+      resolve(code);
+    };
+    // Without an 'error' handler a spawn failure (missing/non-executable
+    // binary) emits an uncaught exception that kills the process.
+    child.on('error', (err) => {
+      logSafe(`# spawn error: ${err instanceof Error ? err.message : String(err)}\n`);
+      done(sawResult ? 0 : 1);
+    });
     child.on('close', (code) => {
-      resolve(typeof code === 'number' ? code : sawResult ? 0 : 1);
+      done(typeof code === 'number' ? code : sawResult ? 0 : 1);
     });
   });
   if (timeoutHandle) clearTimeout(timeoutHandle);
-  await new Promise((resolve) => logStream.end(() => resolve()));
+  await new Promise((resolve) => {
+    try {
+      logStream.end(() => resolve());
+    } catch {
+      resolve();
+    }
+  });
   return { exitCode, events, killed };
 }
 

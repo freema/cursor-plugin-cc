@@ -1,17 +1,18 @@
 #!/usr/bin/env node
-import { collapseArguments, parseArgv } from './lib/args.mjs';
+import { parseCommandArgv } from './lib/args.mjs';
 import { repoRoot } from './lib/git.mjs';
 import { mostRecentFinishedJob, readJob } from './lib/jobs.mjs';
 
 function render(job) {
+  const summary = typeof job.summary === 'string' ? job.summary : '';
   const lines = [];
   lines.push(`### Result of job \`${job.id}\` — ${job.status}`);
   lines.push('');
-  lines.push(`**Model:** ${job.model}`);
+  lines.push(`**Model:** ${String(job.model ?? '?')}`);
   if (job.finishedAt) lines.push(`**Finished:** ${job.finishedAt}`);
   if (typeof job.exitCode === 'number') lines.push(`**Exit code:** ${job.exitCode}`);
   lines.push('');
-  lines.push(`**Prompt:** ${job.prompt}`);
+  lines.push(`**Prompt:** ${String(job.prompt ?? '')}`);
   if (job.filesTouched && job.filesTouched.length > 0) {
     lines.push('');
     lines.push('**Files touched:**');
@@ -20,7 +21,7 @@ function render(job) {
   lines.push('');
   lines.push('**Summary:**');
   lines.push('');
-  lines.push((job.summary ?? '(no summary captured)').trim());
+  lines.push((summary || '(no summary captured)').trim());
   lines.push('');
   if (job.cursorChatId) {
     lines.push(`Resume: \`cursor-agent --resume=${job.cursorChatId}\``);
@@ -35,12 +36,7 @@ function render(job) {
  * @returns {Promise<number>}
  */
 export async function main(rawArgv) {
-  const delimiterIdx = rawArgv.indexOf('--');
-  const firstHalf = delimiterIdx === -1 ? [] : rawArgv.slice(0, delimiterIdx);
-  const userRaw =
-    delimiterIdx === -1 ? rawArgv.join(' ') : rawArgv.slice(delimiterIdx + 1).join(' ');
-  const combined = [...firstHalf, ...collapseArguments(userRaw)];
-  const { positional } = parseArgv(combined);
+  const { positional } = parseCommandArgv(rawArgv);
   const root = await repoRoot(process.cwd());
   const id = positional[0];
   const job = id ? readJob(root, id) : mostRecentFinishedJob(root);
