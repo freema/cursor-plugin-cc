@@ -31,7 +31,7 @@ describe('jobs registry', () => {
   });
 
   it('creates, reads, and updates a job atomically', () => {
-    const job = createJob({ id: 'job1', repoPath: repo, prompt: 'do it', model: 'composer-2' });
+    const job = createJob({ id: 'job1', repoPath: repo, prompt: 'do it', model: 'composer-2.5' });
     expect(job.status).toBe('running');
     const read = readJob(repo, 'job1');
     expect(read?.prompt).toBe('do it');
