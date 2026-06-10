@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Fixed
+
+- **Model aliases updated for Composer 2.5.** Cursor retired the Composer 2.x ids — `cursor-agent --list-models` now lists only `composer-2.5` and `composer-2.5-fast` (verified on macOS, 2026-06-10). The `composer`, `composer-fast`, and `fast` shortcuts now resolve to `composer-2.5-fast` (was the dead `composer-2-fast`), and `composer-full` resolves to `composer-2.5` (was `composer-2`). The retired `composer-2` / `composer-2-fast` ids are kept as identity passthroughs so users on older `cursor-agent` builds aren't broken. README, the `cursor-runner` agent guidance, command/package descriptions, and tests updated to match. (#8)
+
 ## 0.3.0 — /cursor:review + codebase hardening
 
 ### Added

@@ -1,5 +1,5 @@
 ---
-description: Delegate a coding task to the Cursor CLI agent (Composer 2 by default).
+description: Delegate a coding task to the Cursor CLI agent (Composer by default).
 argument-hint: '[--background] [--wait] [--fresh] [--resume[=chat-id]] [--model <id>] [--cloud] [--no-force] [--timeout <sec>] <task...>'
 allowed-tools: Bash(node:*)
 ---

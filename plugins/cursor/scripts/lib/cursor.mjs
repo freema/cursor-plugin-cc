@@ -8,12 +8,17 @@ import { run } from './run.mjs';
 // rotates these over time — `/cursor:setup --print-models` shows the live
 // list for the current account. Unknown ids are passed through verbatim.
 export const MODEL_ALIASES = {
-  composer: 'composer-2-fast',
-  'composer-fast': 'composer-2-fast',
-  fast: 'composer-2-fast',
+  // Short shortcuts point at Cursor's current Composer line (2.5).
+  composer: 'composer-2.5-fast',
+  'composer-fast': 'composer-2.5-fast',
+  fast: 'composer-2.5-fast',
+  'composer-full': 'composer-2.5',
+  // Current Composer ids (identity — also documents the live names).
+  'composer-2.5-fast': 'composer-2.5-fast',
+  'composer-2.5': 'composer-2.5',
+  // Retired Composer ids kept as passthrough for older cursor-agent builds.
   'composer-2-fast': 'composer-2-fast',
   'composer-2': 'composer-2',
-  'composer-full': 'composer-2',
   'composer-1.5': 'composer-1.5',
   auto: 'auto',
   sonnet: 'claude-4.6-sonnet-medium',
@@ -42,7 +47,7 @@ export const MODEL_ALIASES = {
 };
 
 // `auto` lets Cursor pick whatever model the account is entitled to —
-// safe default for users without a paid `composer-2-fast` seat. Power users
+// safe default for users without a paid Composer seat. Power users
 // can override per-invocation via `--model <id>` or globally via the env var
 // CURSOR_PLUGIN_CC_DEFAULT_MODEL.
 export const DEFAULT_MODEL = 'auto';
