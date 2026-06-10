@@ -76,8 +76,7 @@ When in doubt: fresh if the task topic changed, resume if it's the same thread o
 ### 6. Invoke `/cursor:delegate` via a single `Bash` call
 
 ```bash
-"${CLAUDE_PLUGIN_ROOT}/node_modules/.bin/tsx" \
-  "${CLAUDE_PLUGIN_ROOT}/plugins/cursor/scripts/delegate.ts" \
+node "${CLAUDE_PLUGIN_ROOT}/scripts/delegate.mjs" \
   -- --model fast "<prompt>"
 ```
 
@@ -97,7 +96,7 @@ Do not paraphrase the summary, do not rewrite the file list, do not hide the cha
 
 ## Output format
 
-Return exactly what `delegate.ts` prints. One line of your own framing is fine:
+Return exactly what `delegate.mjs` prints. One line of your own framing is fine:
 
 > Delegated to Cursor (`composer-2.5-fast`). Result below.
 

@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **Model aliases updated for Composer 2.5.** Cursor retired the Composer 2.x ids — `cursor-agent --list-models` now lists only `composer-2.5` and `composer-2.5-fast` (verified on macOS, 2026-06-10). The `composer`, `composer-fast`, and `fast` shortcuts now resolve to `composer-2.5-fast` (was the dead `composer-2-fast`), and `composer-full` resolves to `composer-2.5` (was `composer-2`). The retired `composer-2` / `composer-2-fast` ids are kept as identity passthroughs so users on older `cursor-agent` builds aren't broken. README, the `cursor-runner` agent guidance, command/package descriptions, and tests updated to match. (#8)
+- **`cursor-runner` agent invocation corrected.** Step 6 told the subagent to run `node_modules/.bin/tsx …/plugins/cursor/scripts/delegate.ts` — stale from before the zero-deps `.mjs` rewrite: `tsx` is not a dependency, there is no `.ts` file, and the path double-counted `plugins/cursor`. It now matches the working slash command: `node "${CLAUDE_PLUGIN_ROOT}/scripts/delegate.mjs" -- …`. The `/cursor:delegate` slash command was already correct; only the subagent's documented call was broken. (#10)
 
 ## 0.3.0 — /cursor:review + codebase hardening
 
