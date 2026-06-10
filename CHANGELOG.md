@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Fixed
+
+- **`cursor-runner` agent invocation corrected.** Step 6 told the subagent to run `node_modules/.bin/tsx …/plugins/cursor/scripts/delegate.ts` — stale from before the zero-deps `.mjs` rewrite: `tsx` is not a dependency, there is no `.ts` file, and the path double-counted `plugins/cursor`. It now matches the working slash command: `node "${CLAUDE_PLUGIN_ROOT}/scripts/delegate.mjs" -- …`. The `/cursor:delegate` slash command was already correct; only the subagent's documented call was broken.
+
 ## 0.3.0 — /cursor:review + codebase hardening
 
 ### Added
