@@ -8,7 +8,7 @@
     {
       "name": "cursor",
       "source": "./plugins/cursor",
-      "description": "Delegate coding tasks from Claude Code to Cursor CLI (Composer 2 by default).",
+      "description": "Delegate coding tasks from Claude Code to Cursor CLI (Composer by default).",
       "strict": false
     }
   ]

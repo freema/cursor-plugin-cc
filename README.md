@@ -1,7 +1,7 @@
 # cursor-plugin-cc
 
 > **Claude plans. Cursor writes. Claude reviews.**
-> A Claude Code plugin that delegates coding _execution_ to Cursor's Composer 2 — without ever leaving the Claude Code TUI.
+> A Claude Code plugin that delegates coding _execution_ to Cursor's Composer — without ever leaving the Claude Code TUI.
 
 [![CI](https://github.com/freema/cursor-plugin-cc/actions/workflows/ci.yml/badge.svg)](https://github.com/freema/cursor-plugin-cc/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
@@ -22,7 +22,7 @@ claude ▸ Plan written to ~/.claude/plans/health-endpoint.md
 you ▸ /cursor:from-plan --delegate
 
 plugin ▸ wrote tasks/20260427-1830-health-endpoint.md
-       ▸ handing off to cursor-agent (composer-2-fast, --force)…
+       ▸ handing off to cursor-agent (composer-2.5-fast, --force)…
 
 cursor ▸ ✓ src/routes/health.ts          (new, 24 lines)
        ▸ ✓ src/app.ts                    (mounted route)
@@ -42,7 +42,7 @@ cursor ▸ ✓ src/routes/health.ts          (1 line changed)
 
 That's the whole loop. Claude does the **thinking** (plan, review). Cursor does the **typing** (file edits, tests). You stay in one TUI.
 
-**Why this is fast:** `composer-2-fast` is Cursor's tuned-for-CLI variant — it ships small, well-scoped changes in seconds. Claude Code spends its tokens on planning and reviewing, where thinking actually matters. Two tools, each doing what they're best at.
+**Why this is fast:** `composer-2.5-fast` is Cursor's tuned-for-CLI variant — it ships small, well-scoped changes in seconds. Claude Code spends its tokens on planning and reviewing, where thinking actually matters. Two tools, each doing what they're best at.
 
 ## Install
 
@@ -73,7 +73,7 @@ The first `/cursor:setup` run tells you if `cursor-agent` is missing or unauthen
 ### Requirements
 
 - Node.js **≥ 18.18**
-- A Cursor account — paid for Composer 2 models; free works with `--model auto` or other entitled models
+- A Cursor account — paid for Composer models; free works with `--model auto` or other entitled models
 - `cursor-agent` on your `PATH` — install via `curl https://cursor.com/install -fsS | bash`
 - `cursor-agent login` completed at least once
 
@@ -134,7 +134,7 @@ Plus a `cursor-runner` subagent you can invoke from inside Claude to delegate we
 
 ## Why this plugin
 
-Short answer: **Composer 2 is genuinely good at most day-to-day coding work** — and I don't want a pile of terminal windows to drive it. I want Claude Code to be the orchestrator for everything. The flow that keeps working for me is simple: **Claude makes the plan, Composer executes it, Claude reviews the diff.** Two tools, each doing what it is best at.
+Short answer: **Composer is genuinely good at most day-to-day coding work** — and I don't want a pile of terminal windows to drive it. I want Claude Code to be the orchestrator for everything. The flow that keeps working for me is simple: **Claude makes the plan, Composer executes it, Claude reviews the diff.** Two tools, each doing what it is best at.
 
 "Why not do the whole thing inside Cursor, then?" Claude Code has a certain magic, particularly around planning. It is not purely about the underlying model — it is the whole rig (long-context sessions, subagents, the TUI, the way tools compose) that, in my experience, only really clicks inside Claude Code.
 
@@ -156,7 +156,7 @@ Hand a coding task to `cursor-agent -p …`.
 
 | Flag                   | Default                    | Effect                                                                                                                                                                                                                                                                                                                                                         |
 | ---------------------- | -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--model <id>`         | `auto` (or `$CURSOR_PLUGIN_CC_DEFAULT_MODEL`) | Aliases → real Cursor ids: `composer`/`fast` → `composer-2-fast`, `composer-2` → `composer-2`, `sonnet` → `claude-4.6-sonnet-medium`, `opus` → `claude-opus-4-7-high`, `gpt`/`codex` → `gpt-5.3-codex`, `grok` → `grok-4-20`, `gemini` → `gemini-3.1-pro`, `auto` → `auto`. Unknown ids forwarded as-is. `auto` lets Cursor pick whatever model your account is entitled to — safe if you don't have a Composer 2 seat. Run `/cursor:setup --print-models` for the live list. |
+| `--model <id>`         | `auto` (or `$CURSOR_PLUGIN_CC_DEFAULT_MODEL`) | Aliases → real Cursor ids: `composer`/`fast` → `composer-2.5-fast`, `composer-full` → `composer-2.5`, `sonnet` → `claude-4.6-sonnet-medium`, `opus` → `claude-opus-4-7-high`, `gpt`/`codex` → `gpt-5.3-codex`, `grok` → `grok-4-20`, `gemini` → `gemini-3.1-pro`, `auto` → `auto`. Unknown or retired ids (e.g. `composer-2`, `composer-2-fast`) are forwarded as-is. `auto` lets Cursor pick whatever model your account is entitled to — safe if you don't have a Composer seat. Run `/cursor:setup --print-models` for the live list. |
 | `--background`         | off                        | Detach; the command returns a job id immediately.                                                                                                                                                                                                                                                                                                              |
 | `--wait`               | on (if not `--background`) | Block until finished.                                                                                                                                                                                                                                                                                                                                          |
 | `--fresh`              | off                        | Start a brand-new Cursor session (no resume).                                                                                                                                                                                                                                                                                                                  |
@@ -365,11 +365,11 @@ The plugin codebase is English, but it does not impose a language policy on **yo
 The two-phase loop above is the concept; here is the concrete workflow that falls out of it in practice, and the one I keep reaching for:
 
 1. **Plan in Claude Code and write a task file.** Describe what you want; ask Claude to draft a _task spec_ — a markdown file with **goal**, **acceptance criteria**, **files to touch**, and **how to verify** (the same five sections the `cursor-runner` subagent enforces). Save it under `tasks/<slug>.md` in the repo.
-2. **Hand the file to Cursor.** Run `/cursor:delegate @tasks/<slug>.md implement this`. The `@path` shorthand inlines the file contents into the prompt, so Cursor gets the full spec without Claude having to re-type it. Composer 2 executes — it is genuinely fast, and a precisely defined task is usually a one-shot job.
+2. **Hand the file to Cursor.** Run `/cursor:delegate @tasks/<slug>.md implement this`. The `@path` shorthand inlines the file contents into the prompt, so Cursor gets the full spec without Claude having to re-type it. Composer executes — it is genuinely fast, and a precisely defined task is usually a one-shot job.
 3. **Back in Claude Code: review the diff.** Approve, or iterate with `/cursor:resume "fix X"` on the same thread, or escalate with `/cursor:delegate --model opus --fresh <same task file>` if Composer stalled.
 4. **Keep the task files around.** `tasks/` becomes a little log of what the repo's delegated changes looked like. Handy when you want to re-delegate a similar slice — just copy an old file, tweak the bullets.
 
-Why this works: Claude's tokens go into **planning and reviewing**, where thinking matters; Cursor's Composer 2 handles **the actual typing**, where it is cheaper and faster. The task file is the contract between the two phases — if it is sloppy, no model will save you. Writing a good one is itself a skill, and it is the only skill this workflow asks of you.
+Why this works: Claude's tokens go into **planning and reviewing**, where thinking matters; Cursor's Composer handles **the actual typing**, where it is cheaper and faster. The task file is the contract between the two phases — if it is sloppy, no model will save you. Writing a good one is itself a skill, and it is the only skill this workflow asks of you.
 
 If you want Claude to do the whole thing automatically — draft the task file AND hand it off — that is what the `cursor-runner` subagent is for. Ask it to either "draft a task file for X" (it stops there) or "implement X via Cursor" (it drafts, hands off, and reports the diff).
 

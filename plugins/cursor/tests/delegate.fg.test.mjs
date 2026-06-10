@@ -48,7 +48,7 @@ describe('delegate foreground', () => {
     expect(jobs.length).toBe(1);
     const job = jobs[0];
     expect(job.status).toBe('done');
-    expect(job.model).toBe('composer-2-fast');
+    expect(job.model).toBe('composer-2.5-fast');
     expect(job.cursorChatId).toBe('chat_abc123');
     expect(job.filesTouched?.length ?? 0).toBeGreaterThan(0);
   });

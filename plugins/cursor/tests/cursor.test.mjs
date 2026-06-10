@@ -6,13 +6,13 @@ import { HAPPY_FIXTURE, STUB_BIN, makeTempHome } from './helpers.mjs';
 
 describe('buildArgs', () => {
   it('includes the expected flags by default', () => {
-    const args = buildArgs({ prompt: 'hi', model: 'composer-2' });
+    const args = buildArgs({ prompt: 'hi', model: 'composer-2.5' });
     expect(args).toContain('-p');
     expect(args).toContain('--output-format');
     expect(args).toContain('stream-json');
     expect(args).toContain('--trust');
     expect(args).toContain('--model');
-    expect(args).toContain('composer-2');
+    expect(args).toContain('composer-2.5');
     expect(args.at(-1)).toBe('hi');
   });
 
@@ -51,14 +51,22 @@ describe('resolveModel', () => {
   });
 
   it('maps aliases to real Cursor ids', () => {
-    expect(resolveModel('composer')).toBe('composer-2-fast');
-    expect(resolveModel('fast')).toBe('composer-2-fast');
-    expect(resolveModel('composer-2')).toBe('composer-2');
+    expect(resolveModel('composer')).toBe('composer-2.5-fast');
+    expect(resolveModel('composer-fast')).toBe('composer-2.5-fast');
+    expect(resolveModel('fast')).toBe('composer-2.5-fast');
+    expect(resolveModel('composer-full')).toBe('composer-2.5');
+    expect(resolveModel('composer-2.5')).toBe('composer-2.5');
+    expect(resolveModel('composer-2.5-fast')).toBe('composer-2.5-fast');
     expect(resolveModel('sonnet')).toBe('claude-4.6-sonnet-medium');
     expect(resolveModel('opus')).toBe('claude-opus-4-7-high');
     expect(resolveModel('gpt')).toBe('gpt-5.3-codex');
     expect(resolveModel('grok')).toBe('grok-4-20');
     expect(resolveModel('gemini')).toBe('gemini-3.1-pro');
+  });
+
+  it('keeps retired Composer ids as passthrough for older cursor-agent builds', () => {
+    expect(resolveModel('composer-2')).toBe('composer-2');
+    expect(resolveModel('composer-2-fast')).toBe('composer-2-fast');
   });
 
   it('defaults to auto when empty (no env override)', () => {
@@ -69,7 +77,7 @@ describe('resolveModel', () => {
 
   it('honours CURSOR_PLUGIN_CC_DEFAULT_MODEL when no input is given', () => {
     process.env.CURSOR_PLUGIN_CC_DEFAULT_MODEL = 'composer';
-    expect(resolveModel(undefined)).toBe('composer-2-fast');
+    expect(resolveModel(undefined)).toBe('composer-2.5-fast');
     process.env.CURSOR_PLUGIN_CC_DEFAULT_MODEL = 'some-custom-id';
     expect(resolveModel('')).toBe('some-custom-id');
   });
@@ -107,7 +115,7 @@ describe('runHeadless against stub binary', () => {
     const logPath = `${tmp.dir}/run.ndjson`;
     const result = await runHeadless({
       prompt: 'hi',
-      model: 'composer-2',
+      model: 'composer-2.5',
       force: false,
       logPath,
       timeoutSec: 10,
