@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { parseCommandArgv } from './lib/args.mjs';
 import { repoRoot } from './lib/git.mjs';
+import { jobNotFoundMessage } from './lib/hints.mjs';
 import { mostRecentFinishedJob, readJob } from './lib/jobs.mjs';
 
 function render(job) {
@@ -42,9 +43,7 @@ export async function main(rawArgv) {
   const job = id ? readJob(root, id) : mostRecentFinishedJob(root);
   if (!job) {
     process.stderr.write(
-      id
-        ? `No job \`${id}\` found for this repository.\n`
-        : 'No finished Cursor jobs tracked for this repository yet.\n',
+      id ? jobNotFoundMessage(id) : 'No finished Cursor jobs tracked for this repository yet.\n',
     );
     return 1;
   }

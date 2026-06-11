@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { parseCommandArgv } from './lib/args.mjs';
 import { repoRoot } from './lib/git.mjs';
+import { jobNotFoundMessage } from './lib/hints.mjs';
 import { listJobs, readJob } from './lib/jobs.mjs';
 import { mdCell } from './lib/md.mjs';
 
@@ -82,7 +83,7 @@ export async function main(rawArgv) {
   if (id) {
     const job = readJob(root, id);
     if (!job) {
-      process.stderr.write(`No job \`${id}\` found for this repository.\n`);
+      process.stderr.write(jobNotFoundMessage(id));
       return 1;
     }
     process.stdout.write(renderDetail(job));

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { parseCommandArgv } from './lib/args.mjs';
 import { repoRoot } from './lib/git.mjs';
+import { jobNotFoundMessage } from './lib/hints.mjs';
 import { cancelJob, findRunningJobs, readJob } from './lib/jobs.mjs';
 
 /**
@@ -32,7 +33,7 @@ export async function main(rawArgv) {
   const before = readJob(root, id);
   const updated = await cancelJob(root, id);
   if (!updated) {
-    process.stderr.write(`No job \`${id}\` found for this repository.\n`);
+    process.stderr.write(jobNotFoundMessage(id));
     return 1;
   }
   if (before && before.status !== 'running') {
