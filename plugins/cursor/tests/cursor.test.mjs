@@ -60,13 +60,15 @@ describe('resolveModel', () => {
     expect(resolveModel('sonnet')).toBe('claude-4.6-sonnet-medium');
     expect(resolveModel('opus')).toBe('claude-opus-4-7-high');
     expect(resolveModel('gpt')).toBe('gpt-5.3-codex');
-    expect(resolveModel('grok')).toBe('grok-4-20');
+    expect(resolveModel('grok')).toBe('grok-4.3');
+    expect(resolveModel('grok-build')).toBe('grok-build-0.1');
     expect(resolveModel('gemini')).toBe('gemini-3.1-pro');
   });
 
   it('keeps retired Composer ids as passthrough for older cursor-agent builds', () => {
     expect(resolveModel('composer-2')).toBe('composer-2');
     expect(resolveModel('composer-2-fast')).toBe('composer-2-fast');
+    expect(resolveModel('grok-4-20')).toBe('grok-4-20');
   });
 
   it('defaults to auto when empty (no env override)', () => {
