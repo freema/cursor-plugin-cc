@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.3.2 — clearer "job not found" hint
+
+### Fixed
+
+- **`/cursor:status`, `/cursor:result`, `/cursor:cancel` now explain a missing job id** (#7). When `/cursor:delegate` runs as a Claude Code background command, Claude Code surfaces _its own_ wrapper id (`Command running in background with ID: …`), not the Cursor job id — so `/cursor:status <that-id>` always missed with a bare `No job … found`. The three commands now append a hint pointing out that a Claude Code background id is not the Cursor job id and that `/cursor:status` with no arguments lists the tracked jobs so the real id can be copied. New shared `lib/hints.mjs#jobNotFoundMessage`.
+
 ## 0.3.1 — model alias refresh (Composer 2.5 + Grok 4.3)
 
 ### Fixed
