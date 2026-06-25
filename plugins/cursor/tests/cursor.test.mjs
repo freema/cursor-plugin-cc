@@ -59,7 +59,7 @@ describe('resolveModel', () => {
     expect(resolveModel('composer-2.5-fast')).toBe('composer-2.5-fast');
     expect(resolveModel('sonnet')).toBe('claude-4.6-sonnet-medium');
     expect(resolveModel('opus')).toBe('claude-opus-4-7-high');
-    expect(resolveModel('gpt')).toBe('gpt-5.3-codex');
+    expect(resolveModel('gpt')).toBe('gpt-5.5-high');
     expect(resolveModel('grok')).toBe('grok-4.3');
     expect(resolveModel('grok-build')).toBe('grok-build-0.1');
     expect(resolveModel('gemini')).toBe('gemini-3.1-pro');

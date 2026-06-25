@@ -32,7 +32,7 @@ export const MODEL_ALIASES = {
   'opus-4.7-max': 'claude-opus-4-7-max',
   'opus-4.7-thinking': 'claude-opus-4-7-thinking-high',
   'opus-4.6': 'claude-4.6-opus-high',
-  gpt: 'gpt-5.3-codex',
+  gpt: 'gpt-5.5-high',
   codex: 'gpt-5.3-codex',
   'gpt-5.3-codex': 'gpt-5.3-codex',
   'gpt-5.3-codex-fast': 'gpt-5.3-codex-fast',
