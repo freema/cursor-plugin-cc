@@ -117,11 +117,12 @@ What lives where after a run:
 
 ## What you get
 
-Ten slash commands under the `cursor:` namespace:
+Eleven slash commands under the `cursor:` namespace:
 
 - **`/cursor:delegate`** — hand a coding task to Cursor, foreground or background.
 - **`/cursor:from-plan`** — turn a Claude Code plan (from plan mode) into a `tasks/<file>.md` and hand it off to Cursor.
 - **`/cursor:review`** — read-only code review of your git diff by a Cursor model. Reports findings; never edits files.
+- **`/cursor:adversarial-review`** — steerable review that challenges the design and approach (assumptions, tradeoffs, failure modes), not just implementation defects. Read-only.
 - **`/cursor:browser`** — verify a URL / flow in a real browser via Cursor's `chrome-devtools` MCP.
 - **`/cursor:status`** — list recent jobs or inspect a specific one.
 - **`/cursor:result`** — print the final output of a finished job.
@@ -130,7 +131,7 @@ Ten slash commands under the `cursor:` namespace:
 - **`/cursor:sessions`** — list Cursor's own chat sessions for this repo.
 - **`/cursor:setup`** — health-check the CLI, list models + configured MCPs, or guide installation.
 
-Plus a `cursor-runner` subagent you can invoke from inside Claude to delegate well-scoped tasks automatically.
+Plus a `cursor-runner` subagent you can invoke from inside Claude to delegate well-scoped tasks automatically, and a `composer-prompting` skill it uses to shape well-specified tasks into tight Cursor prompts.
 
 ## Why this plugin
 
@@ -205,11 +206,13 @@ Read-only code review of your git diff by a Cursor model. The plugin collects th
 
 By default it picks the target automatically: a dirty working tree is reviewed as-is; a clean tree falls back to a branch diff against the detected default branch. Any trailing text is passed as a reviewer **focus**.
 
+**Wait or background?** If you don't pass `--wait` or `--background`, the command first estimates the diff size (`git status` / `git diff --shortstat`) and asks once whether to wait for the result or run it in the background — recommending background for anything beyond a tiny 1–2 file change, since a multi-file review can take a while. Pass `--wait` or `--background` explicitly to skip the question.
+
 | Flag                                 | Default           | Effect                                                                                             |
 | ------------------------------------ | ----------------- | ------------------------------------------------------------------------------------------------- |
 | `--base <ref>`                       | auto              | Review the branch diff `<ref>...HEAD` (merge-base) instead of the working tree.                    |
 | `--scope auto\|working-tree\|branch` | `auto`            | Force the target. `working-tree` = uncommitted changes; `branch` = vs the detected default branch. |
-| `--adversarial`                      | off               | Challenge the design and assumptions, not just implementation defects.                             |
+| `--adversarial`                      | off               | Challenge the design and assumptions, not just implementation defects. Prefer the dedicated [`/cursor:adversarial-review`](#cursoradversarial-review-flags-focus) command; this flag is kept for backward compatibility. |
 | `--model <id>`                       | `auto`            | Same aliases as `/cursor:delegate`. Use `gpt`/`opus`/`gemini` for a deeper review.                 |
 | `--background`                       | off               | Detach; returns a job id immediately. Read it later with `/cursor:result`.                         |
 | `--wait`                             | on                | Block until the review finishes (default unless `--background`).                                   |
@@ -227,6 +230,21 @@ Examples:
 ```
 
 This is a **second opinion**, not a replacement for Claude reviewing the diff in-session. Reach for it when you want a different model's eyes on the change, or to offload a large review while Claude keeps orchestrating.
+
+### `/cursor:adversarial-review [flags] [focus...]`
+
+A **steerable** sibling of `/cursor:review` that questions the chosen implementation and design rather than only hunting implementation defects. Use it to pressure-test assumptions, tradeoffs, failure modes, and whether a different approach would have been simpler or safer — for example before shipping a change you are not fully sure about.
+
+It uses the **same review-target selection** as `/cursor:review` (working tree by default, `--base <ref>` for a branch diff, `--scope`, `--model`, `--wait`/`--background`) and, like `/cursor:review`, estimates the diff and asks wait-vs-background when you don't pass an explicit mode. Any trailing text is the reviewer **focus** — use it to point the challenge at a specific risk area. It is read-only and never edits files; the same post-flight check applies.
+
+```
+/cursor:adversarial-review                                  # challenge the working-tree diff
+/cursor:adversarial-review --base main                      # challenge this branch vs main
+/cursor:adversarial-review "is the retry/backoff design sound under load?"
+/cursor:adversarial-review --background --model opus look for race conditions and question the approach
+```
+
+Under the hood it is `/cursor:review --adversarial`, so it shows up as a normal job in `/cursor:status`, `/cursor:result`, and `/cursor:cancel`.
 
 ### `/cursor:browser <url> <what to verify...>`
 

@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { main as reviewMain } from '../scripts/review.mjs';
+import { main as reviewMain, buildReviewPrompt } from '../scripts/review.mjs';
 import { listJobs } from '../scripts/lib/jobs.mjs';
 import {
   REVIEW_HAPPY_FIXTURE,
@@ -116,6 +116,33 @@ describe('review', () => {
     expect(job.status).toBe('failed');
     expect(job.summary).toMatch(/post-flight/i);
     expect(job.summary).toMatch(/read-only/i);
+  });
+
+  it('adversarial flag runs end-to-end and completes', async () => {
+    initRepo(tmp.dir);
+    writeFileSync(join(tmp.dir, 'foo.ts'), 'export const foo = 42;\n');
+    const outSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    try {
+      const code = await reviewMain(['--wait', '--adversarial']);
+      expect(code).toBe(0);
+    } finally {
+      outSpy.mockRestore();
+    }
+    const job = listJobs(tmp.dir)[0];
+    expect(job.status).toBe('done');
+  });
+
+  it('buildReviewPrompt: adversarial framing only appears with the flag', () => {
+    const args = { label: 'working tree on main', body: '## Diff\n\n(none)', focus: '' };
+    const plain = buildReviewPrompt({ ...args, adversarial: false });
+    const adv = buildReviewPrompt({ ...args, adversarial: true });
+    expect(plain).toContain('senior code reviewer');
+    expect(plain).not.toMatch(/adversarial/i);
+    expect(adv).toMatch(/adversarial/i);
+    expect(adv).toMatch(/challenge the design/i);
+    // Both remain strictly read-only.
+    expect(plain).toMatch(/READ-ONLY/i);
+    expect(adv).toMatch(/READ-ONLY/i);
   });
 
   it('supports --base for a branch diff', async () => {

@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.4.0 — /cursor:adversarial-review + estimate-first reviews + composer-prompting skill
+
+Ported from upstream [`openai/codex-plugin-cc`](https://github.com/openai/codex-plugin-cc) (whose `/codex:adversarial-review`, estimate-first review flow, and `gpt-5-4-prompting` skill this release mirrors), adapted to the Cursor CLI.
+
+### Added
+
+- **`/cursor:adversarial-review`** — a first-class steerable review command that challenges the chosen implementation and design (assumptions, tradeoffs, failure modes, whether a different approach would be simpler or safer), not just implementation defects. It reuses the existing review runtime (`scripts/review.mjs --adversarial`), so it supports `--base <ref>`, `--scope`, `--model`, `--wait`/`--background`, and free-form focus text, and is tracked as a normal job (`/cursor:status`, `/cursor:result`, `/cursor:cancel` all apply). Promotes what used to be only the `--adversarial` flag on `/cursor:review` into a discoverable command with sharper framing.
+- **`composer-prompting` skill** — the Cursor/Composer prompt-shaping guidance (repo grounding, the five-section prompt anatomy + guardrails, chunking heuristics, model selection, resume-vs-fresh) now lives in `plugins/cursor/skills/composer-prompting/SKILL.md`. The `cursor-runner` subagent references it via a new `skills:` frontmatter entry instead of restating the mechanics inline, and the main thread can consult it when hand-crafting `/cursor:delegate` prompts. Mirrors codex's internal `gpt-5-4-prompting` skill.
+
+### Changed
+
+- **`/cursor:review` and `/cursor:adversarial-review` estimate the diff before running.** When neither `--wait` nor `--background` is passed, the command inspects `git status` / `git diff --shortstat` to gauge review size, then asks once (via `AskUserQuestion`) whether to wait or run in the background — recommending background for anything beyond a tiny 1–2 file change. Explicit `--wait` / `--background` skip the question. The commands moved from an auto-executing one-liner wrapper to a model-orchestrated flow; their `allowed-tools` now include `Bash(git:*)` and `AskUserQuestion` for the estimate step. Background runs still use the plugin's own detached worker (the script returns a job id immediately), not a Claude background task.
+- **`cursor-runner` subagent slimmed** — the prompt-anatomy, chunking, model, and resume/fresh sections were extracted into the `composer-prompting` skill; the agent now points at the skill and keeps only its operational spine (ground → invoke `/cursor:delegate` → return verbatim) and guardrails.
+
 ## 0.3.2 — clearer "job not found" hint
 
 ### Fixed
