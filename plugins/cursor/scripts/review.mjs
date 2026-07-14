@@ -39,9 +39,9 @@ function parseFlags(argv) {
   return { focus, model, background, wait, adversarial, base, scope, timeout, noGitCheck, worker };
 }
 
-function buildReviewPrompt({ label, body, focus, adversarial }) {
+export function buildReviewPrompt({ label, body, focus, adversarial }) {
   const role = adversarial
-    ? 'You are a skeptical senior engineer running an ADVERSARIAL design review. Pressure-test the approach itself, not only the implementation defects.'
+    ? 'You are a skeptical senior engineer running an ADVERSARIAL review. Challenge whether the chosen implementation and design are the right approach — question assumptions, tradeoffs, and failure modes, not only the implementation defects.'
     : 'You are a senior code reviewer.';
   const lines = [role, '', `**Review target:** ${label}`];
   if (focus) lines.push('', `**Reviewer focus (prioritise this):** ${focus}`);
@@ -60,6 +60,7 @@ function buildReviewPrompt({ label, body, focus, adversarial }) {
   if (adversarial) {
     lines.push(
       '- Challenge the design: is this the right approach? What assumptions does it rest on? Where does it break under real-world load, concurrency, or edge cases?',
+      '- Would a different approach be simpler, safer, or cheaper to maintain? If so, say what and why — but stay grounded in the diff, do not invent requirements.',
     );
   }
   lines.push(
