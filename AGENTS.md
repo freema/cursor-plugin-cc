@@ -9,7 +9,7 @@ A Claude Code plugin that delegates coding tasks from Claude to the Cursor CLI (
 ## Hard rules
 
 1. **Zero runtime dependencies.** The plugin ships as plain ESM `.mjs` and must execute directly after `/plugin install` with zero `npm install` in the user's plugin cache. If you are about to add `execa`, `zod`, `nanoid`, a HTTP client, a command parser, or any other third-party runtime package — stop. Write a small inline helper instead. See `plugins/cursor/scripts/lib/run.mjs` as the reference pattern (it replaced `execa` in ~80 lines).
-2. **No build step.** No TypeScript, no bundler, no `dist/`. `scripts/*.mjs` IS the ship artefact. If you find yourself wanting one, something has gone wrong with the approach.
+2. **No build step.** No TypeScript source, no bundler, no `dist/`. `scripts/*.mjs` IS the ship artefact. If you find yourself wanting one, something has gone wrong with the approach. (`npm run typecheck` runs `tsc --checkJs --noEmit` over the JSDoc annotations in `scripts/lib/` — that is a dev-time check like eslint, not a build step; `typescript` stays a devDependency.)
 3. **Slash command scripts live under `plugins/cursor/scripts/<cmd>.mjs`.** Their wrappers at `plugins/cursor/commands/<cmd>.md` must use `node "${CLAUDE_PLUGIN_ROOT}/scripts/<cmd>.mjs" -- "$ARGUMENTS"` with quoted `$ARGUMENTS` — unquoted breaks under zsh on any prompt containing `?`, `*`, or `@`. Exception: `review.md` and `adversarial-review.md` are model-orchestrated (they estimate the diff and ask wait-vs-background before running), so they give Claude the `node …` command in a fenced block rather than an auto-executing `!` line, and `adversarial-review` reuses `review.mjs --adversarial` instead of shipping its own script.
 4. **`Bash(node:*)` is the only permission pattern used in `allowed-tools`.** Do not invent path-based patterns — Claude Code does not expand `${CLAUDE_PLUGIN_ROOT}` inside `allowed-tools`. Exception: the two estimate-first review commands additionally list `Bash(git:*)`, `AskUserQuestion`, and `Read, Glob, Grep` for the size-estimate/ask step — those are tool-name patterns, not path-based ones, so they are fine.
 5. **Jobs are persisted under `~/.cursor-plugin-cc/jobs/<repo-hash>/`.** Never break that layout; users point scripts at those files when reporting bugs.
@@ -31,8 +31,8 @@ Plus a **Constraints** block that forbids: touching files outside the list, rena
 ## How to make a change
 
 1. Branch named `feat/…`, `fix/…`, `refactor/…`, or `docs/…`.
-2. Work inside `plugins/cursor/`. `cd plugins/cursor && npm install` installs dev deps (vitest, eslint, prettier — the only ones).
-3. Run tests: `npm test`. Run lint: `npm run lint`. Both must be green before committing.
+2. Work inside `plugins/cursor/`. `cd plugins/cursor && npm install` installs dev deps (vitest, eslint, prettier, typescript — dev-time only).
+3. Run tests: `npm test`. Run lint: `npm run lint`. Run types: `npm run typecheck`. All three must be green before committing.
 4. Commit messages in conventional style (`type(scope): subject`).
 5. Open a PR against `main` with a summary + test plan. CI must pass across Node 18.18 / 20 / 22 × Ubuntu / macOS.
 6. Squash-merge only.
@@ -50,7 +50,7 @@ Plus a **Constraints** block that forbids: touching files outside the list, rena
 - `plugins/cursor/scripts/lib/*.mjs` — shared helpers (run, id, args, paths, jobs, kill, parse, cursor, git, invoked, plan, hints, md).
 - `plugins/cursor/commands/*.md` — slash command wrappers.
 - `plugins/cursor/agents/cursor-runner.md` — the handoff subagent prompt.
-- `plugins/cursor/skills/composer-prompting/SKILL.md` — Cursor prompt-shaping guidance the `cursor-runner` subagent references via its `skills:` frontmatter.
+- `plugins/cursor/skills/composer-prompting/` — Cursor prompt-shaping guidance the `cursor-runner` subagent references via its `skills:` frontmatter. `SKILL.md` is the always-loaded spine; the detailed material lives in `references/*.md` (prompt anatomy, model selection, anti-patterns), loaded on demand.
 - `plugins/cursor/tests/*.test.mjs` — vitest specs + fixtures.
 - `.claude-plugin/marketplace.json` — what Claude Code's `/plugin install` reads.
 
