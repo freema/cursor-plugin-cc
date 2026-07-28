@@ -12,7 +12,7 @@ import {
   readJob,
   updateJob,
 } from '../scripts/lib/jobs.mjs';
-import { makeTempHome } from './helpers.mjs';
+import { isAlive, makeTempHome, waitForDeath } from './helpers.mjs';
 
 describe('jobs registry', () => {
   let tmp;
@@ -82,6 +82,60 @@ describe('jobs registry', () => {
       if (!child.killed) child.kill('SIGKILL');
     }
   });
+
+  it.skipIf(process.platform === 'win32')(
+    'cancelJob kills a detached worker AND its child (process group)',
+    async () => {
+      // Reproduce the background-delegate shape: spawnBackground() starts the
+      // worker with `detached: true` (own process group) and the worker spawns
+      // cursor-agent as a plain child (same group). Cancelling must reach BOTH
+      // — killing only the worker orphans the stand-in cursor-agent.
+      const workerScript = [
+        "const { spawn } = require('node:child_process');",
+        "const c = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });",
+        'console.log(c.pid);',
+        'setInterval(() => {}, 1000);',
+      ].join('\n');
+      const worker = spawn(process.execPath, ['-e', workerScript], {
+        stdio: ['ignore', 'pipe', 'ignore'],
+        detached: true,
+      });
+      const childPid = await new Promise((resolve, reject) => {
+        let buf = '';
+        worker.stdout.on('data', (d) => {
+          buf += d;
+          const m = /^(\d+)\s/.exec(buf);
+          if (m) resolve(Number(m[1]));
+        });
+        worker.on('error', reject);
+        setTimeout(() => reject(new Error('worker never reported its child pid')), 5_000);
+      });
+      try {
+        createJob({ id: 'tree', repoPath: repo, prompt: 'p', model: 'm' });
+        updateJob(repo, 'tree', { pid: worker.pid });
+        const cancelled = await cancelJob(repo, 'tree', 2_000);
+        expect(cancelled?.status).toBe('cancelled');
+        await waitForDeath(worker.pid);
+        await waitForDeath(childPid);
+        expect(isAlive(worker.pid)).toBe(false);
+        expect(isAlive(childPid)).toBe(false);
+      } finally {
+        // Belt and braces: never leave the group behind on assertion failure.
+        for (const pid of [worker.pid, childPid]) {
+          try {
+            process.kill(-pid, 'SIGKILL');
+          } catch {
+            // noop
+          }
+          try {
+            process.kill(pid, 'SIGKILL');
+          } catch {
+            // noop
+          }
+        }
+      }
+    },
+  );
 
   it('cancelJob on unknown id returns null', async () => {
     const res = await cancelJob(repo, 'nope');

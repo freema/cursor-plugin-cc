@@ -8,6 +8,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { join } from 'node:path';
+import { killTree } from './kill.mjs';
 import { ensureDir, jobsDir, logsDir } from './paths.mjs';
 
 /**
@@ -238,25 +239,20 @@ export async function cancelJob(repoPath, id, graceMs = 5_000) {
   if (!job) return null;
   if (job.status !== 'running') return job;
   // NOTE: PIDs are recycled by the OS. If the original process already exited
-  // and its PID was reused, the signals below could hit an unrelated process.
-  // The job dir is short-lived and pruned after 30 days, so we accept this
-  // rather than track a process-group / start-time identity cross-platform.
+  // and its PID was reused, the signals below could hit an unrelated process
+  // (or, for a reused group-leader pid, its process group). The job dir is
+  // short-lived and pruned after 30 days, so we accept this rather than track
+  // a start-time identity cross-platform.
   if (typeof job.pid === 'number' && isProcessAlive(job.pid)) {
-    try {
-      process.kill(job.pid, 'SIGTERM');
-    } catch {
-      // ignore — may have exited
-    }
+    // killTree signals the worker's whole process group so the cursor-agent
+    // child dies too — see lib/kill.mjs for why plain kill(pid) is not enough.
+    killTree(job.pid, 'SIGTERM');
     const deadline = Date.now() + graceMs;
     while (Date.now() < deadline && isProcessAlive(job.pid)) {
       await new Promise((r) => setTimeout(r, 200));
     }
     if (isProcessAlive(job.pid)) {
-      try {
-        process.kill(job.pid, 'SIGKILL');
-      } catch {
-        // ignore
-      }
+      killTree(job.pid, 'SIGKILL');
     }
   }
   return updateJob(repoPath, id, {
