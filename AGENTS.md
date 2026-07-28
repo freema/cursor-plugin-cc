@@ -46,9 +46,11 @@ Plus a **Constraints** block that forbids: touching files outside the list, rena
 
 ## Where things live
 
-- `plugins/cursor/scripts/<cmd>.mjs` — command entrypoints (10; `adversarial-review` has no script of its own — it reuses `review.mjs --adversarial`). `session-hook.mjs` is the one non-command script: the SessionStart/SessionEnd hook entrypoint.
-- `plugins/cursor/hooks/hooks.json` — Claude Code hook registration (session lifecycle).
-- `plugins/cursor/scripts/lib/*.mjs` — shared helpers (run, id, args, paths, jobs, parse, cursor, git, invoked, plan, hints, md).
+- `plugins/cursor/scripts/<cmd>.mjs` — command entrypoints (10; `adversarial-review` has no script of its own — it reuses `review.mjs --adversarial`). Two non-command scripts: `session-hook.mjs` (SessionStart/SessionEnd) and `stop-review-gate-hook.mjs` (Stop).
+- `plugins/cursor/hooks/hooks.json` — Claude Code hook registration (session lifecycle + optional stop review gate).
+- `plugins/cursor/prompts/*.md` — prompt templates (`{{UPPER_SNAKE}}` placeholders, loaded via `lib/prompts.mjs`). Edit prompts here, not as JS string arrays.
+- `plugins/cursor/schemas/review-output.schema.json` — the structured-review contract; validated hand-rolled in `lib/review-output.mjs` (zero-deps — do not add a schema-validator package).
+- `plugins/cursor/scripts/lib/*.mjs` — shared helpers (run, id, args, paths, jobs, parse, cursor, git, invoked, plan, hints, md, prompts, config, review-output).
 - `plugins/cursor/commands/*.md` — slash command wrappers.
 - `plugins/cursor/agents/cursor-runner.md` — the handoff subagent prompt.
 - `plugins/cursor/skills/composer-prompting/SKILL.md` — Cursor prompt-shaping guidance the `cursor-runner` subagent references via its `skills:` frontmatter.

@@ -1,6 +1,17 @@
 {
-  "description": "Session lifecycle for Cursor jobs: stamp jobs with the owning Claude session, cancel the session's running jobs on exit.",
+  "description": "Session lifecycle for Cursor jobs (stamp + cleanup) and the optional stop-time review gate.",
   "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/stop-review-gate-hook.mjs\"",
+            "timeout": 900
+          }
+        ]
+      }
+    ],
     "SessionStart": [
       {
         "hooks": [

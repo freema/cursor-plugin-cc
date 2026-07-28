@@ -1,0 +1,2 @@
+{"type":"system","subtype":"init","session_id":"chat_gate_002","cwd":"/tmp/repo"}
+{"type":"result","subtype":"success","chat_id":"chat_gate_002","result":"BLOCK: delegate.mjs timeout path has no test and the error branch swallows the exit code."}

@@ -38,6 +38,7 @@ export const SESSION_ID_ENV = 'CURSOR_PLUGIN_CC_SESSION_ID';
  * @property {boolean=} background
  * @property {boolean=} cloud
  * @property {string=} sessionId
+ * @property {import('./review-output.mjs').ReviewOutput=} review
  */
 
 /**

@@ -4,3 +4,4 @@ coverage
 package-lock.json
 *.ndjson
 .cursor-plugin-cc
+prompts/

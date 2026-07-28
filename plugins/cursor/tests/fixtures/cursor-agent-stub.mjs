@@ -3,6 +3,17 @@
 // the CURSOR_AGENT_STUB_FIXTURE env var, then exits.
 import { readFileSync } from 'node:fs';
 
+// `cursor-agent status` — auth check used by authStatus(). Controlled by
+// CURSOR_AGENT_STUB_AUTH: 'out' simulates a logged-out CLI.
+if (process.argv[2] === 'status') {
+  if (process.env.CURSOR_AGENT_STUB_AUTH === 'out') {
+    process.stdout.write('Not logged in\n');
+    process.exit(1);
+  }
+  process.stdout.write('Logged in as test-stub\n');
+  process.exit(0);
+}
+
 const fixture = process.env.CURSOR_AGENT_STUB_FIXTURE;
 if (!fixture) {
   process.stderr.write('stub: CURSOR_AGENT_STUB_FIXTURE not set\n');

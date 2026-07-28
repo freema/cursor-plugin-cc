@@ -3,7 +3,9 @@ import { accessSync, constants as fsConstants, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseCommandArgv } from './lib/args.mjs';
+import { getConfig, setConfigValue } from './lib/config.mjs';
 import { authStatus, listConfiguredMcps, listModels, resolveBin } from './lib/cursor.mjs';
+import { repoRoot } from './lib/git.mjs';
 import { ensureDir, jobsDir, pluginHome } from './lib/paths.mjs';
 import { run } from './lib/run.mjs';
 
@@ -80,6 +82,17 @@ async function gatherDoctor() {
     { ok: true, detail: apiKey ? `set (${maskKey(apiKey)})` : 'not set (using local session)' },
   ]);
 
+  const root = await repoRoot(process.cwd());
+  checks.push([
+    'stop review gate',
+    {
+      ok: true,
+      detail: getConfig(root).stopReviewGate
+        ? 'enabled for this repo (disable with `--disable-review-gate`)'
+        : 'disabled (enable with `--enable-review-gate`)',
+    },
+  ]);
+
   const mcps = bin ? await listConfiguredMcps() : [];
 
   // The CURSOR_API_KEY check is already `ok:true` whether or not the key is
@@ -87,6 +100,26 @@ async function gatherDoctor() {
   // some other check's stderr must not mask a real failure.
   const allOk = checks.every(([, r]) => r.ok);
   return { bin, checks, mcps, allOk };
+}
+
+/**
+ * @param {boolean} enable
+ * @returns {Promise<number>}
+ */
+async function toggleReviewGate(enable) {
+  const root = await repoRoot(process.cwd());
+  setConfigValue(root, 'stopReviewGate', enable);
+  if (enable) {
+    process.stdout.write(
+      'Stop review gate **enabled** for this repository.\n\n' +
+        'Before Claude Code ends a turn, a Cursor model reviews the work from that turn; ' +
+        'a `BLOCK: …` verdict keeps the session going until the issue is fixed. ' +
+        'Disable anytime with `/cursor:setup --disable-review-gate`.\n',
+    );
+  } else {
+    process.stdout.write('Stop review gate **disabled** for this repository.\n');
+  }
+  return 0;
 }
 
 async function doctor(asJson = false) {
@@ -193,7 +226,16 @@ async function baseCheck() {
  * @returns {Promise<number>}
  */
 export async function main(rawArgv) {
-  const { flags } = parseCommandArgv(rawArgv, ['doctor', 'print-models', 'install', 'json']);
+  const { flags } = parseCommandArgv(rawArgv, [
+    'doctor',
+    'print-models',
+    'install',
+    'json',
+    'enable-review-gate',
+    'disable-review-gate',
+  ]);
+  if (flags['enable-review-gate'] || flags['enableReviewGate']) return toggleReviewGate(true);
+  if (flags['disable-review-gate'] || flags['disableReviewGate']) return toggleReviewGate(false);
   // --json always emits the full structured doctor report — hooks and scripts
   // branch on `checks[].ok` / `allOk` instead of parsing Markdown.
   if (flags['json']) return doctor(true);
