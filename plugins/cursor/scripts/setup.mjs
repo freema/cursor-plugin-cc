@@ -41,12 +41,9 @@ function maskKey(value) {
   return `${value.slice(0, 4)}…${value.slice(-4)}`;
 }
 
-async function doctor() {
-  const lines = ['### /cursor:setup --doctor\n'];
+async function gatherDoctor() {
+  /** @type {Array<[string, {ok: boolean, detail: string}]>} */
   const checks = [];
-  lines.push(`- Node: ${process.version}`);
-  lines.push(`- Platform: ${process.platform} (${process.arch})`);
-  lines.push(`- Plugin home: \`${pluginHome()}\``);
 
   let bin = '';
   try {
@@ -83,6 +80,37 @@ async function doctor() {
     { ok: true, detail: apiKey ? `set (${maskKey(apiKey)})` : 'not set (using local session)' },
   ]);
 
+  const mcps = bin ? await listConfiguredMcps() : [];
+
+  // The CURSOR_API_KEY check is already `ok:true` whether or not the key is
+  // set, so a literal `r.ok` is correct here — a stray "not set" substring in
+  // some other check's stderr must not mask a real failure.
+  const allOk = checks.every(([, r]) => r.ok);
+  return { bin, checks, mcps, allOk };
+}
+
+async function doctor(asJson = false) {
+  const { bin, checks, mcps, allOk } = await gatherDoctor();
+
+  if (asJson) {
+    const payload = {
+      node: process.version,
+      platform: process.platform,
+      arch: process.arch,
+      pluginHome: pluginHome(),
+      checks: checks.map(([name, r]) => ({ name, ok: r.ok, detail: r.detail })),
+      mcps,
+      allOk,
+    };
+    process.stdout.write(JSON.stringify(payload, null, 2) + '\n');
+    return allOk ? 0 : 1;
+  }
+
+  const lines = ['### /cursor:setup --doctor\n'];
+  lines.push(`- Node: ${process.version}`);
+  lines.push(`- Platform: ${process.platform} (${process.arch})`);
+  lines.push(`- Plugin home: \`${pluginHome()}\``);
+
   lines.push('');
   for (const [name, r] of checks) {
     const icon = r.ok ? '✓' : '✗';
@@ -90,7 +118,6 @@ async function doctor() {
   }
 
   if (bin) {
-    const mcps = await listConfiguredMcps();
     lines.push('');
     lines.push('**Configured Cursor MCPs:**');
     if (mcps.length === 0) {
@@ -103,10 +130,6 @@ async function doctor() {
     }
   }
 
-  // The CURSOR_API_KEY check is already `ok:true` whether or not the key is
-  // set, so a literal `r.ok` is correct here — a stray "not set" substring in
-  // some other check's stderr must not mask a real failure.
-  const allOk = checks.every(([, r]) => r.ok);
   lines.push('');
   lines.push(allOk ? 'All checks passed.' : 'Some checks failed — see above.');
   process.stdout.write(lines.join('\n') + '\n');
@@ -170,7 +193,10 @@ async function baseCheck() {
  * @returns {Promise<number>}
  */
 export async function main(rawArgv) {
-  const { flags } = parseCommandArgv(rawArgv, ['doctor', 'print-models', 'install']);
+  const { flags } = parseCommandArgv(rawArgv, ['doctor', 'print-models', 'install', 'json']);
+  // --json always emits the full structured doctor report — hooks and scripts
+  // branch on `checks[].ok` / `allOk` instead of parsing Markdown.
+  if (flags['json']) return doctor(true);
   if (flags['doctor']) return doctor();
   if (flags['print-models'] || flags['printModels']) return printModels();
   if (flags['install']) return maybeInstall();

@@ -12,7 +12,7 @@ A Claude Code plugin that delegates coding tasks from Claude to the Cursor CLI (
 2. **No build step.** No TypeScript source, no bundler, no `dist/`. `scripts/*.mjs` IS the ship artefact. If you find yourself wanting one, something has gone wrong with the approach. (`npm run typecheck` runs `tsc --checkJs --noEmit` over the JSDoc annotations in `scripts/lib/` — that is a dev-time check like eslint, not a build step; `typescript` stays a devDependency.)
 3. **Slash command scripts live under `plugins/cursor/scripts/<cmd>.mjs`.** Their wrappers at `plugins/cursor/commands/<cmd>.md` must use `node "${CLAUDE_PLUGIN_ROOT}/scripts/<cmd>.mjs" -- "$ARGUMENTS"` with quoted `$ARGUMENTS` — unquoted breaks under zsh on any prompt containing `?`, `*`, or `@`. Exception: `review.md` and `adversarial-review.md` are model-orchestrated (they estimate the diff and ask wait-vs-background before running), so they give Claude the `node …` command in a fenced block rather than an auto-executing `!` line, and `adversarial-review` reuses `review.mjs --adversarial` instead of shipping its own script.
 4. **`Bash(node:*)` is the only permission pattern used in `allowed-tools`.** Do not invent path-based patterns — Claude Code does not expand `${CLAUDE_PLUGIN_ROOT}` inside `allowed-tools`. Exception: the two estimate-first review commands additionally list `Bash(git:*)`, `AskUserQuestion`, and `Read, Glob, Grep` for the size-estimate/ask step — those are tool-name patterns, not path-based ones, so they are fine.
-5. **Jobs are persisted under `~/.cursor-plugin-cc/jobs/<repo-hash>/`.** Never break that layout; users point scripts at those files when reporting bugs.
+5. **Jobs are persisted under `<state-root>/jobs/<repo-hash>/`.** Never break that layout; users point scripts at those files when reporting bugs. The state root resolves in `lib/paths.mjs#pluginHome`: `CURSOR_PLUGIN_CC_HOME` env → an existing `~/.cursor-plugin-cc` (legacy installs keep their history) → `CLAUDE_PLUGIN_DATA/state` (fresh installs) → `~/.cursor-plugin-cc`.
 6. **Language: everything in this repo is English.** Code, comments, commit messages, docs, PR bodies, issue titles. The plugin does not impose a language policy on target repos — `cursor-runner` reads target-repo conventions — but this repo itself is English-only.
 7. **Do not impose conventions on target repos.** The `cursor-runner` subagent reads `AGENTS.md` / `.cursor/rules` / existing code in whatever repo the user is working in and tells Cursor to match THAT style. When editing the subagent, do not hardcode English / Prettier / whatever.
 
@@ -46,7 +46,8 @@ Plus a **Constraints** block that forbids: touching files outside the list, rena
 
 ## Where things live
 
-- `plugins/cursor/scripts/<cmd>.mjs` — command entrypoints (10; `adversarial-review` has no script of its own — it reuses `review.mjs --adversarial`).
+- `plugins/cursor/scripts/<cmd>.mjs` — command entrypoints (10; `adversarial-review` has no script of its own — it reuses `review.mjs --adversarial`). `session-hook.mjs` is the one non-command script: the SessionStart/SessionEnd hook entrypoint.
+- `plugins/cursor/hooks/hooks.json` — Claude Code hook registration (session lifecycle).
 - `plugins/cursor/scripts/lib/*.mjs` — shared helpers (run, id, args, paths, jobs, kill, parse, cursor, git, invoked, plan, hints, md).
 - `plugins/cursor/commands/*.md` — slash command wrappers.
 - `plugins/cursor/agents/cursor-runner.md` — the handoff subagent prompt.
