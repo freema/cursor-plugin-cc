@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Added
+
+- **`npm run typecheck`** — `tsc --checkJs --noEmit` over the JSDoc annotations in `scripts/lib/` (`tsconfig.check.json`), wired into CI. Dev-time only: `typescript` is a devDependency, nothing is compiled, `.mjs` stays the ship artefact. The first run surfaced (and this change fixes) two real annotation gaps: `collectReviewContext`'s `mode` was inferred as plain `string` against the declared `'working-tree'|'branch'` union, and `walkToolUses` accessed properties on a value narrowed only to `object`.
+
+### Changed
+
+- **`composer-prompting` skill split into SKILL.md + `references/`** (progressive disclosure, mirroring codex's `gpt-5-4-prompting` layout). `SKILL.md` keeps the always-relevant spine (when to use, repo grounding, assembly checklist); the detail moved to `references/prompt-anatomy.md` (five sections + guardrails, now with a full worked example), `references/model-selection.md` (escalation ladder, chunking, resume-vs-fresh), and the new `references/composer-antipatterns.md` (six prompt shapes that reliably produce bad Composer runs, adapted from codex's anti-patterns).
+
 ## 0.4.0 — /cursor:adversarial-review + estimate-first reviews + composer-prompting skill
 
 Ported from upstream [`openai/codex-plugin-cc`](https://github.com/openai/codex-plugin-cc) (whose `/codex:adversarial-review`, estimate-first review flow, and `gpt-5-4-prompting` skill this release mirrors), adapted to the Cursor CLI.

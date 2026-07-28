@@ -126,15 +126,16 @@ export function* walkToolUses(node) {
     for (const item of node) yield* walkToolUses(item);
     return;
   }
-  const type = node.type;
-  const name = typeof node.name === 'string' ? node.name : undefined;
+  const obj = /** @type {Record<string, unknown>} */ (node);
+  const type = obj.type;
+  const name = typeof obj.name === 'string' ? obj.name : undefined;
   if ((type === 'tool_use' || type === 'tool_call') && name) {
     yield {
       name,
-      input: node.input ?? node.arguments ?? node.params ?? node.tool_input,
+      input: obj.input ?? obj.arguments ?? obj.params ?? obj.tool_input,
     };
   }
-  for (const v of Object.values(node)) yield* walkToolUses(v);
+  for (const v of Object.values(obj)) yield* walkToolUses(v);
 }
 
 /**

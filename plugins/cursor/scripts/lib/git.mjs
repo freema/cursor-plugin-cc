@@ -183,6 +183,7 @@ export async function collectReviewContext(cwd, opts = {}) {
   const maxDiffBytes = opts.maxDiffBytes ?? MAX_DIFF_BYTES;
   const branch = await currentBranch(cwd);
 
+  /** @type {'working-tree'|'branch'} */
   let mode;
   let baseRef = base;
   // Reused below for working-tree mode so we don't run `git diff`/`ls-files`
