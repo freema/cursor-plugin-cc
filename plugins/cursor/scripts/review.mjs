@@ -14,6 +14,8 @@ import {
 } from './lib/jobs.mjs';
 import { ensureDir, jobsDir, logsDir } from './lib/paths.mjs';
 import { extractChatId, summariseEvents } from './lib/parse.mjs';
+import { interpolateTemplate, loadPromptTemplate } from './lib/prompts.mjs';
+import { parseReviewOutput, stripJsonBlock } from './lib/review-output.mjs';
 
 const BOOLEAN_FLAGS = ['background', 'wait', 'adversarial', 'git-check', 'help'];
 
@@ -40,37 +42,18 @@ function parseFlags(argv) {
 }
 
 export function buildReviewPrompt({ label, body, focus, adversarial }) {
-  const role = adversarial
-    ? 'You are a skeptical senior engineer running an ADVERSARIAL review. Challenge whether the chosen implementation and design are the right approach — question assumptions, tradeoffs, and failure modes, not only the implementation defects.'
-    : 'You are a senior code reviewer.';
-  const lines = [role, '', `**Review target:** ${label}`];
-  if (focus) lines.push('', `**Reviewer focus (prioritise this):** ${focus}`);
-  lines.push(
-    '',
-    'Review ONLY the changes below — not the entire codebase.',
-    '',
-    body,
-    '---',
-    '',
-    '**How to respond:**',
-    '- Group findings by severity: **Blocking**, **Should-fix**, **Nits**.',
-    '- For each finding: `path:line` — what is wrong, why it matters, and a concrete fix (described, not applied).',
-    '- Flag correctness bugs, security holes, missing error handling, broken or missing tests, and deviations from the repo conventions (read `AGENTS.md` / `.cursor/rules` / `CLAUDE.md` if present).',
-  );
-  if (adversarial) {
-    lines.push(
-      '- Challenge the design: is this the right approach? What assumptions does it rest on? Where does it break under real-world load, concurrency, or edge cases?',
-      '- Would a different approach be simpler, safer, or cheaper to maintain? If so, say what and why — but stay grounded in the diff, do not invent requirements.',
-    );
-  }
-  lines.push(
-    '- End with a one-line verdict on its own line: **APPROVE**, **APPROVE WITH NITS**, or **REQUEST CHANGES**.',
-    '',
-    '**Hard constraints:**',
-    '- This is a **READ-ONLY review.** Do NOT modify, create, or delete any files. Do NOT run commands that change state. Do NOT stage or commit anything. If you spot a bug, describe the fix — never apply it.',
-    '- If the diff above was truncated, you MAY read specific files for context (read-only), but never edit them.',
-  );
-  return lines.join('\n');
+  const template = loadPromptTemplate('review');
+  return interpolateTemplate(template, {
+    ROLE: adversarial
+      ? 'You are a skeptical senior engineer running an ADVERSARIAL review. Challenge whether the chosen implementation and design are the right approach — question assumptions, tradeoffs, and failure modes, not only the implementation defects.'
+      : 'You are a senior code reviewer.',
+    REVIEW_TARGET: label,
+    FOCUS_BLOCK: focus ? `**Reviewer focus (prioritise this):** ${focus}` : '',
+    BODY: body,
+    ADVERSARIAL_GUIDANCE: adversarial
+      ? '- Challenge the design: is this the right approach? What assumptions does it rest on? Where does it break under real-world load, concurrency, or edge cases?\n- Would a different approach be simpler, safer, or cheaper to maintain? If so, say what and why — but stay grounded in the diff, do not invent requirements.'
+      : '',
+  });
 }
 
 function renderResult(out, { jobId, status, summary, chatId, warnings }) {
@@ -127,18 +110,24 @@ async function runReview({ flags, context, jobId, root, onEvent }) {
   const warnings = postFlightWarnings(summary);
   const status =
     result.exitCode === 0 && summary.success && warnings.length === 0 ? 'done' : 'failed';
+  // The prompt asks the reviewer to append a fenced ```json verdict block
+  // (schemas/review-output.schema.json). When it parses, store the data on
+  // the record and hide the raw fence from the human-facing summary.
+  const structured = parseReviewOutput(summary.summary ?? '');
+  const displaySummary = structured.ok ? stripJsonBlock(summary.summary ?? '') : summary.summary;
   updateJob(root, jobId, {
     status,
     exitCode: result.exitCode,
     finishedAt: new Date().toISOString(),
     summary:
       warnings.length > 0
-        ? `${summary.summary}\n\n[plugin post-flight]\n${warnings.join('\n\n')}`
-        : summary.summary,
+        ? `${displaySummary}\n\n[plugin post-flight]\n${warnings.join('\n\n')}`
+        : displaySummary,
     filesTouched: summary.filesTouched,
+    ...(structured.ok ? { review: structured.data } : {}),
     ...(chatId ? { cursorChatId: chatId } : {}),
   });
-  return { result, summary, chatId, warnings, status };
+  return { result, summary: { ...summary, summary: displaySummary }, chatId, warnings, status };
 }
 
 async function foreground(flags, context, jobId, root) {

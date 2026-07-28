@@ -1,0 +1,2 @@
+{"type":"system","subtype":"init","session_id":"chat_gate_001","cwd":"/tmp/repo"}
+{"type":"result","subtype":"success","chat_id":"chat_gate_001","result":"ALLOW: previous turn made no code changes."}

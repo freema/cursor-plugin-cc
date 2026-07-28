@@ -316,13 +316,23 @@ Shortcut for `/cursor:delegate --resume <task...>`. Without a task, sends an emp
 
 Shells out to `cursor-agent ls` and lists Cursor's own chat sessions for this repo. If that call times out or returns empty, the plugin falls back to its local job registry.
 
-### `/cursor:setup [--doctor] [--print-models] [--install] [--json]`
+### `/cursor:setup [--doctor] [--print-models] [--install] [--json] [--enable-review-gate|--disable-review-gate]`
 
-Runs a quick health-check. `--doctor` produces extended diagnostics (Node version, PATH, `CURSOR_API_KEY` presence masked, jobs dir writability, cursor-agent version). `--print-models` shells out to `cursor-agent --list-models`. `--install` prints the install command but **does not run it** — you must copy-paste it yourself. `--json` emits the full doctor report as JSON (`checks[].ok`, `allOk`) for scripting.
+Runs a quick health-check. `--doctor` produces extended diagnostics (Node version, PATH, `CURSOR_API_KEY` presence masked, jobs dir writability, cursor-agent version). `--print-models` shells out to `cursor-agent --list-models`. `--install` prints the install command but **does not run it** — you must copy-paste it yourself. `--json` emits the full doctor report as JSON (`checks[].ok`, `allOk`) for scripting. `--enable-review-gate` / `--disable-review-gate` toggle the per-repo [stop review gate](#stop-review-gate-opt-in).
+
+## Stop review gate (opt-in)
+
+```
+/cursor:setup --enable-review-gate     # per repo; --disable-review-gate turns it off
+```
+
+When enabled, a `Stop` hook has a Cursor model review each turn's edits **before Claude Code is allowed to end the turn**. The reviewer answers `ALLOW: …` or `BLOCK: …`; a block feeds the reason back to Claude, which keeps working until the issue is fixed. Turns without code changes are allowed through immediately, a missing or logged-out Cursor CLI degrades to a note instead of blocking, and the gate never fires twice in a row for the same stop (no loops). Off by default.
+
+Review runs also emit a machine-readable verdict: the review prompt asks for a trailing JSON block (`schemas/review-output.schema.json` — verdict, findings with severity/file/line, next steps). When present, it is stored on the job record and available via `/cursor:result --json`; the human-facing summary stays pure Markdown.
 
 ## Session lifecycle
 
-The plugin registers two Claude Code hooks (`hooks/hooks.json`):
+The plugin registers Claude Code hooks (`hooks/hooks.json`):
 
 - **SessionStart** exports the Claude session id into the session's environment, so every job created from that session is stamped with it. `/cursor:status` uses the stamp to scope its default view to *your* jobs — parallel Claude sessions in the same repo stop seeing each other's runs (use `--all` for everything).
 - **SessionEnd** cancels the session's still-running jobs. Background delegates run as detached workers, so without this a closed Claude session would leave `cursor-agent` running unattended. Jobs from other sessions — or jobs with no session stamp — are left alone.
