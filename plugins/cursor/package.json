@@ -39,6 +39,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "lint": "prettier --check . && eslint .",
+    "typecheck": "tsc -p tsconfig.check.json",
     "format": "prettier --write .",
     "delegate": "node scripts/delegate.mjs",
     "status": "node scripts/status.mjs",
@@ -52,9 +53,11 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.16.0",
+    "@types/node": "^22.20.1",
     "@vitest/coverage-v8": "^2.1.8",
     "eslint": "^9.16.0",
     "prettier": "^3.4.2",
+    "typescript": "^5.9.3",
     "vitest": "^2.1.8"
   }
 }
