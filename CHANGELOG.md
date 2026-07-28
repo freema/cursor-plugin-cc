@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Fixed
+
+- **`/cursor:cancel` no longer orphans the running `cursor-agent`.** Background jobs run as a detached worker (its own process group) that spawns `cursor-agent` as a child. Cancelling signalled only the worker pid, so the worker died but `cursor-agent` kept running — still editing files and consuming Cursor credits — while `/cursor:status` reported the job as `cancelled`. `cancelJob` now signals the worker's whole process group (SIGTERM, then SIGKILL after the grace period) via the new `lib/kill.mjs#killTree`, falling back to a single-pid kill for foreground jobs whose recorded pid is not a group leader. On Windows the tree is terminated with `taskkill /T /F`.
+
 ## 0.4.0 — /cursor:adversarial-review + estimate-first reviews + composer-prompting skill
 
 Ported from upstream [`openai/codex-plugin-cc`](https://github.com/openai/codex-plugin-cc) (whose `/codex:adversarial-review`, estimate-first review flow, and `gpt-5-4-prompting` skill this release mirrors), adapted to the Cursor CLI.
