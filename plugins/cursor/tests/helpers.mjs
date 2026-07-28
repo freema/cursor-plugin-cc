@@ -10,6 +10,22 @@ export function makeTempHome() {
   };
 }
 
+export function isAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function waitForDeath(pid, timeoutMs = 3_000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline && isAlive(pid)) {
+    await new Promise((r) => setTimeout(r, 50));
+  }
+}
+
 export const STUB_BIN = new URL('./fixtures/cursor-agent-stub.mjs', import.meta.url).pathname;
 export const HAPPY_FIXTURE = new URL('./fixtures/cursor-events/happy-path.ndjson', import.meta.url)
   .pathname;

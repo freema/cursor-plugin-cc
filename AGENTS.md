@@ -47,7 +47,7 @@ Plus a **Constraints** block that forbids: touching files outside the list, rena
 ## Where things live
 
 - `plugins/cursor/scripts/<cmd>.mjs` — command entrypoints (10; `adversarial-review` has no script of its own — it reuses `review.mjs --adversarial`).
-- `plugins/cursor/scripts/lib/*.mjs` — shared helpers (run, id, args, paths, jobs, parse, cursor, git, invoked, plan, hints, md).
+- `plugins/cursor/scripts/lib/*.mjs` — shared helpers (run, id, args, paths, jobs, kill, parse, cursor, git, invoked, plan, hints, md).
 - `plugins/cursor/commands/*.md` — slash command wrappers.
 - `plugins/cursor/agents/cursor-runner.md` — the handoff subagent prompt.
 - `plugins/cursor/skills/composer-prompting/SKILL.md` — Cursor prompt-shaping guidance the `cursor-runner` subagent references via its `skills:` frontmatter.
