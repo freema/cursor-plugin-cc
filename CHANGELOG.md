@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Fixed
+
+- **`/cursor:from-plan` no longer discards plans it cannot parse** (#16). A plan/spec whose headings don't match the Claude plan-mode shape (e.g. files produced by other spec/plan tooling) was reduced to a four-placeholder skeleton — the entire plan body was silently dropped and Cursor received an empty task. Such documents are now embedded **verbatim** in the task file (with the guardrail block still appended), matching the pass-through behaviour the module docs always promised. `SECTION_HINTS` additionally learned common spec-driven headings (`overview`, `problem statement`, `requirements`, `design`, `spec`, `tasks`, `steps`, `testing`, `validation`, `success criteria`), so those map onto the proper task sections instead of falling back. README now documents that `from-plan` accepts any path, not just `~/.claude/plans/`.
+
 ## 0.5.0 — session lifecycle hooks, stop review gate, process-group cancel
 
 Second port wave from upstream [`openai/codex-plugin-cc`](https://github.com/openai/codex-plugin-cc) (session tracking, the stop-time review gate, prompt templates, structured review output), adapted to the Cursor CLI and the zero-deps runtime — plus a real cancellation bug found while comparing the two codebases. (#17, #18, #20, #21)

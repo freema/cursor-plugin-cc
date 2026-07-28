@@ -198,6 +198,15 @@ Examples:
 /cursor:from-plan --list                # show the 15 most recent plans
 ```
 
+**Not limited to Claude's plan mode.** The `[plan-name]` argument also accepts an absolute or repo-relative **path to any Markdown plan/spec file** — one written by another spec/plan plugin (Superpowers, GSD, …) or by hand:
+
+```
+/cursor:from-plan ./specs/checkout-flow/plan.md
+/cursor:from-plan --delegate docs/rfc-042.md
+```
+
+Sections named like `Overview`, `Requirements`, `Design`, `Tasks`, or `Testing` are mapped onto the task shape; a document whose structure isn't recognised at all is embedded **verbatim** (with the guardrail block appended) instead of being reduced to placeholders. And if you don't need the task-file conversion, `/cursor:delegate "Implement @specs/checkout-flow/plan.md"` sends the file to Cursor directly.
+
 This is the closest thing to "plan in Claude, execute in Cursor" in one session: Claude does the thinking, Cursor does the typing, and the task file is a durable contract between the two.
 
 ### `/cursor:review [flags] [focus...]`
