@@ -4,7 +4,9 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## 0.5.0 — session lifecycle hooks, stop review gate, process-group cancel
+
+Second port wave from upstream [`openai/codex-plugin-cc`](https://github.com/openai/codex-plugin-cc) (session tracking, the stop-time review gate, prompt templates, structured review output), adapted to the Cursor CLI and the zero-deps runtime — plus a real cancellation bug found while comparing the two codebases. (#17, #18, #20, #21)
 
 ### Added
 
