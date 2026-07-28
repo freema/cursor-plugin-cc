@@ -176,9 +176,32 @@ export function slugify(s) {
   return cleaned.slice(0, 50) || 'plan';
 }
 
+// Hints are ordered most- to least-specific per intent. The tail of each list
+// covers common spec-driven formats from other plan/spec tooling (Superpowers,
+// GSD, hand-written specs), not just Claude Code's plan-mode shape. (#16)
 const SECTION_HINTS = {
-  context: ['context', 'background', 'why', 'motivation'],
-  approach: ['approach', 'plan', 'implementation', 'solution', 'design'],
+  context: [
+    'context',
+    'background',
+    'why',
+    'motivation',
+    'problem statement',
+    'problem',
+    'overview',
+    'summary',
+  ],
+  approach: [
+    'approach',
+    'plan',
+    'implementation',
+    'solution',
+    'design',
+    'requirements',
+    'specification',
+    'spec',
+    'tasks',
+    'steps',
+  ],
   files: [
     'file-by-file change list',
     'files to touch',
@@ -188,7 +211,16 @@ const SECTION_HINTS = {
     'critical files to modify',
     'files',
   ],
-  verification: ['verification', 'how to verify', 'test plan', 'tests', 'acceptance criteria'],
+  verification: [
+    'verification',
+    'how to verify',
+    'test plan',
+    'tests',
+    'acceptance criteria',
+    'testing',
+    'validation',
+    'success criteria',
+  ],
 };
 
 /**
@@ -231,6 +263,36 @@ export function buildTaskContent(plan) {
   lines.push('');
   lines.push(`> Generated from Claude Code plan: \`${plan.path}\``);
   lines.push('');
+
+  // Pass-through fallback: a plan/spec in a shape we don't recognise (another
+  // spec plugin's format, a hand-written doc) must never be reduced to four
+  // placeholder sections — that silently discards the entire plan body.
+  // Embed the document verbatim instead and let Cursor follow it as written.
+  if (!context && !approach && !files && !verification) {
+    const rawBody = String(plan.raw ?? '')
+      .replace(/^\s*#\s[^\n]*\n/, '') // drop the leading H1 — already emitted above
+      .trim();
+    lines.push('## Task specification');
+    lines.push('');
+    lines.push(
+      '_The source plan uses its own structure (not the Claude plan-mode shape); it is included verbatim below — follow it as written._',
+    );
+    lines.push('');
+    lines.push(rawBody || '(the source plan file is empty)');
+    lines.push('');
+    lines.push('## How to verify');
+    lines.push('');
+    lines.push(
+      'Follow any verification steps in the specification above; otherwise:\n\n' +
+        "- Run the project's test suite (`npm test`, `pnpm test`, `task test`, etc.).\n" +
+        '- Run the type-check / lint if the project has one.\n' +
+        '- Manual spot-check of the changed behaviour.',
+    );
+    lines.push('');
+    pushConstraints(lines);
+    return lines.join('\n');
+  }
+
   lines.push('## Goal');
   lines.push('');
   lines.push(plan.title ? plan.title : '(see Context below)');
@@ -258,6 +320,14 @@ export function buildTaskContent(plan) {
         '- Manual spot-check of the changed behaviour.',
   );
   lines.push('');
+  pushConstraints(lines);
+  return lines.join('\n');
+}
+
+/**
+ * @param {string[]} lines
+ */
+function pushConstraints(lines) {
   lines.push('## Constraints');
   lines.push('');
   lines.push(
@@ -269,5 +339,4 @@ export function buildTaskContent(plan) {
     '- Do not modify lockfiles (`package-lock.json`, `pnpm-lock.yaml`, `yarn.lock`) unless dependencies are part of the task.',
   );
   lines.push('');
-  return lines.join('\n');
 }

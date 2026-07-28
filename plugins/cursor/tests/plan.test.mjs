@@ -103,6 +103,72 @@ describe('buildTaskContent', () => {
     expect(out).toContain('just this.');
     expect(out).toContain('(no Approach');
   });
+
+  it('passes an unrecognised plan shape through verbatim instead of placeholders', () => {
+    const raw = [
+      '# Externí spec',
+      '',
+      '## Etapa 1',
+      '',
+      'Přidat endpoint /health.',
+      '',
+      '## Poznámky',
+      '',
+      'Držet se stylu okolního kódu.',
+      '',
+    ].join('\n');
+    const plan = {
+      path: '/tmp/external-spec.md',
+      title: 'Externí spec',
+      slug: 'externi-spec',
+      sections: splitSections(raw).sections,
+      raw,
+    };
+    const out = buildTaskContent(plan);
+    // The whole body survives…
+    expect(out).toContain('Přidat endpoint /health.');
+    expect(out).toContain('Držet se stylu okolního kódu.');
+    expect(out).toContain('follow it as written');
+    // …and no placeholder skeleton is emitted.
+    expect(out).not.toContain('(no Context section');
+    expect(out).not.toContain('(no Approach');
+    // Guardrails still apply.
+    expect(out).toContain('## Constraints');
+    // The leading H1 is not duplicated.
+    expect(out.match(/# Externí spec/g)).toHaveLength(1);
+  });
+
+  it('maps common spec-driven headings onto the task sections', () => {
+    const raw = [
+      '# Spec-shaped plan',
+      '',
+      '## Overview',
+      '',
+      'Why we do this.',
+      '',
+      '## Requirements',
+      '',
+      '- must do X',
+      '',
+      '## Testing',
+      '',
+      '- run `npm test`',
+      '',
+    ].join('\n');
+    const plan = {
+      path: '/tmp/spec.md',
+      title: 'Spec-shaped plan',
+      slug: 'spec-shaped-plan',
+      sections: splitSections(raw).sections,
+      raw,
+    };
+    const out = buildTaskContent(plan);
+    expect(out).toContain('Why we do this.');
+    expect(out).toContain('- must do X');
+    expect(out).toContain('- run `npm test`');
+    expect(out).not.toContain('(no Context section');
+    expect(out).not.toContain('(no Approach');
+  });
 });
 
 describe('resolvePlanPath + parsePlanFile against a temp plans dir', () => {
