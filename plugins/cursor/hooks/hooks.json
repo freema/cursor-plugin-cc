@@ -1,0 +1,27 @@
+{
+  "description": "Session lifecycle for Cursor jobs: stamp jobs with the owning Claude session, cancel the session's running jobs on exit.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/session-hook.mjs\" SessionStart",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/session-hook.mjs\" SessionEnd",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}

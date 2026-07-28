@@ -1,6 +1,6 @@
 ---
 description: Show active and recent Cursor jobs for this repository.
-argument-hint: '[job-id] [--all]'
+argument-hint: '[job-id] [--all] [--json]'
 disable-model-invocation: true
 allowed-tools: Bash(node:*)
 ---

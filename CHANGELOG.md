@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Added
+
+- **Session lifecycle hooks** (`hooks/hooks.json` + `scripts/session-hook.mjs`), modelled on `openai/codex-plugin-cc`. **SessionStart** exports the Claude session id (and `CLAUDE_PLUGIN_DATA`) into the session env via `CLAUDE_ENV_FILE`, so every job records which session started it (`sessionId` on the job record, stamped in `createJob`). **SessionEnd** cancels the session's still-running jobs — a closed Claude session no longer leaves detached workers and `cursor-agent` running unattended. Jobs from other sessions or without a session stamp are never touched.
+- **`/cursor:status` scopes its default view to the current session.** The no-arg table now shows this session's jobs plus unattributed ones, with a hint line when rows are hidden; `--all` lifts both the session scope and the 10-row cap. New `lib/jobs.mjs#filterJobsForSession`.
+- **`--json` on `/cursor:status`, `/cursor:result`, `/cursor:setup`.** Status and result emit the raw job record(s); setup emits the full doctor report (`checks[].ok`, `allOk`). Meant for scripting and future hooks that branch on job state instead of parsing Markdown.
+
+### Changed
+
+- **State root honours `CLAUDE_PLUGIN_DATA`.** Fresh installs store jobs under Claude Code's plugin data dir (`CLAUDE_PLUGIN_DATA/state/jobs/<repo-hash>/`), which is cleaned up with the plugin. Existing installs keep `~/.cursor-plugin-cc` — an existing legacy dir always wins so job history is never stranded. `CURSOR_PLUGIN_CC_HOME` still overrides everything. The `jobs/<repo-hash>/` layout is unchanged.
+
 ## 0.4.0 — /cursor:adversarial-review + estimate-first reviews + composer-prompting skill
 
 Ported from upstream [`openai/codex-plugin-cc`](https://github.com/openai/codex-plugin-cc) (whose `/codex:adversarial-review`, estimate-first review flow, and `gpt-5-4-prompting` skill this release mirrors), adapted to the Cursor CLI.

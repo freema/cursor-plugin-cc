@@ -37,7 +37,7 @@ function render(job) {
  * @returns {Promise<number>}
  */
 export async function main(rawArgv) {
-  const { positional } = parseCommandArgv(rawArgv);
+  const { positional, flags } = parseCommandArgv(rawArgv, ['json']);
   const root = await repoRoot(process.cwd());
   const id = positional[0];
   const job = id ? readJob(root, id) : mostRecentFinishedJob(root);
@@ -46,6 +46,12 @@ export async function main(rawArgv) {
       id ? jobNotFoundMessage(id) : 'No finished Cursor jobs tracked for this repository yet.\n',
     );
     return 1;
+  }
+  if (flags['json']) {
+    // The record carries status, summary, filesTouched, exitCode, chat id —
+    // callers (hooks, scripts) branch on those instead of parsing Markdown.
+    process.stdout.write(JSON.stringify(job, null, 2) + '\n');
+    return 0;
   }
   if (job.status === 'running') {
     process.stdout.write(

@@ -1,6 +1,6 @@
 ---
 description: Print the final output of a finished Cursor job (most recent by default).
-argument-hint: '[job-id]'
+argument-hint: '[job-id] [--json]'
 allowed-tools: Bash(node:*)
 ---
 

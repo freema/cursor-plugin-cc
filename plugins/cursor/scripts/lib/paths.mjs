@@ -1,12 +1,20 @@
 import { createHash } from 'node:crypto';
-import { mkdirSync, realpathSync } from 'node:fs';
+import { existsSync, mkdirSync, realpathSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 
 export function pluginHome() {
   const fromEnv = process.env.CURSOR_PLUGIN_CC_HOME;
   if (fromEnv && fromEnv.trim().length > 0) return resolve(fromEnv);
-  return join(homedir(), '.cursor-plugin-cc');
+  // Existing installs keep their state where it already lives — the harness
+  // starting to provide a data dir must never strand previous job history.
+  const legacy = join(homedir(), '.cursor-plugin-cc');
+  if (existsSync(legacy)) return legacy;
+  // Fresh installs prefer the Claude-Code-managed plugin data dir: it is
+  // cleaned up with the plugin instead of leaving state behind in $HOME.
+  const pluginData = process.env.CLAUDE_PLUGIN_DATA;
+  if (pluginData && pluginData.trim().length > 0) return join(resolve(pluginData), 'state');
+  return legacy;
 }
 
 /**

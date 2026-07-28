@@ -2,7 +2,7 @@
 import { parseCommandArgv } from './lib/args.mjs';
 import { repoRoot } from './lib/git.mjs';
 import { jobNotFoundMessage } from './lib/hints.mjs';
-import { listJobs, readJob } from './lib/jobs.mjs';
+import { SESSION_ID_ENV, filterJobsForSession, listJobs, readJob } from './lib/jobs.mjs';
 import { mdCell } from './lib/md.mjs';
 
 function age(iso) {
@@ -77,7 +77,8 @@ function renderDetail(r) {
  * @returns {Promise<number>}
  */
 export async function main(rawArgv) {
-  const { positional, flags } = parseCommandArgv(rawArgv, ['all']);
+  const { positional, flags } = parseCommandArgv(rawArgv, ['all', 'json']);
+  const asJson = Boolean(flags['json']);
   const root = await repoRoot(process.cwd());
   const id = positional[0];
   if (id) {
@@ -86,14 +87,26 @@ export async function main(rawArgv) {
       process.stderr.write(jobNotFoundMessage(id));
       return 1;
     }
-    process.stdout.write(renderDetail(job));
+    process.stdout.write(asJson ? JSON.stringify(job, null, 2) + '\n' : renderDetail(job));
     return 0;
   }
-  const limit = flags['all'] ? undefined : 10;
-  const listOpts = {};
-  if (typeof limit === 'number') listOpts.limit = limit;
-  const rows = listJobs(root, listOpts);
+  // Default view is scoped to the current Claude session (plus unattributed
+  // jobs); --all lifts both the session scope and the 10-row cap.
+  const all = listJobs(root);
+  const rows = flags['all']
+    ? all
+    : filterJobsForSession(all, process.env[SESSION_ID_ENV]).slice(0, 10);
+  if (asJson) {
+    process.stdout.write(JSON.stringify(rows, null, 2) + '\n');
+    return 0;
+  }
   process.stdout.write(renderTable(rows));
+  const hidden = all.length - rows.length;
+  if (hidden > 0) {
+    process.stdout.write(
+      `\n_${hidden} job(s) hidden (other sessions or older) — use \`--all\` to list everything._\n`,
+    );
+  }
   return 0;
 }
 

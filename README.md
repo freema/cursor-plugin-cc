@@ -275,18 +275,19 @@ Restart Cursor so `cursor-agent` picks up the new MCP. `--isolated` makes each r
 
 Verify with `/cursor:setup --doctor` — it now lists every MCP `cursor-agent` can see and whether each is loaded.
 
-### `/cursor:status [job-id] [--all]`
+### `/cursor:status [job-id] [--all] [--json]`
 
-Without args, shows the last 10 jobs for this repository as a table. With an id, shows the full job record including the Cursor chat id (so you can resume manually with `cursor-agent --resume=<id>`). Pass `--all` to drop the 10-row limit.
+Without args, shows the jobs for this repository as a table — scoped to the current Claude Code session (plus jobs that predate session tracking), capped at 10 rows. With an id, shows the full job record including the Cursor chat id (so you can resume manually with `cursor-agent --resume=<id>`). Pass `--all` to lift both the session scope and the row cap. Pass `--json` to get the raw job record(s) for scripting.
 
 ```
 /cursor:status
 /cursor:status V1StGXR8_Z
+/cursor:status --all
 ```
 
-### `/cursor:result [job-id]`
+### `/cursor:result [job-id] [--json]`
 
-Prints the final summary of a finished job. Defaults to the most recent one for this repo.
+Prints the final summary of a finished job. Defaults to the most recent one for this repo. `--json` prints the raw job record (status, summary, filesTouched, exit code, chat id) instead of Markdown.
 
 ```
 /cursor:result
@@ -315,9 +316,18 @@ Shortcut for `/cursor:delegate --resume <task...>`. Without a task, sends an emp
 
 Shells out to `cursor-agent ls` and lists Cursor's own chat sessions for this repo. If that call times out or returns empty, the plugin falls back to its local job registry.
 
-### `/cursor:setup [--doctor] [--print-models] [--install]`
+### `/cursor:setup [--doctor] [--print-models] [--install] [--json]`
 
-Runs a quick health-check. `--doctor` produces extended diagnostics (Node version, PATH, `CURSOR_API_KEY` presence masked, jobs dir writability, cursor-agent version). `--print-models` shells out to `cursor-agent --list-models`. `--install` prints the install command but **does not run it** — you must copy-paste it yourself.
+Runs a quick health-check. `--doctor` produces extended diagnostics (Node version, PATH, `CURSOR_API_KEY` presence masked, jobs dir writability, cursor-agent version). `--print-models` shells out to `cursor-agent --list-models`. `--install` prints the install command but **does not run it** — you must copy-paste it yourself. `--json` emits the full doctor report as JSON (`checks[].ok`, `allOk`) for scripting.
+
+## Session lifecycle
+
+The plugin registers two Claude Code hooks (`hooks/hooks.json`):
+
+- **SessionStart** exports the Claude session id into the session's environment, so every job created from that session is stamped with it. `/cursor:status` uses the stamp to scope its default view to *your* jobs — parallel Claude sessions in the same repo stop seeing each other's runs (use `--all` for everything).
+- **SessionEnd** cancels the session's still-running jobs. Background delegates run as detached workers, so without this a closed Claude session would leave `cursor-agent` running unattended. Jobs from other sessions — or jobs with no session stamp — are left alone.
+
+If you *want* a run to outlive the session, start it outside the hook's reach (e.g. `node scripts/delegate.mjs` from a plain terminal) — jobs without a session stamp are never auto-cancelled.
 
 ## The two-phase loop
 
@@ -417,7 +427,7 @@ The task file stays in `tasks/` as a durable record — the contract between pla
 | --------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
 | `CURSOR_API_KEY`                  | Forwarded to `cursor-agent`. Optional — `cursor-agent login` is usually enough.                                    |
 | `CURSOR_AGENT_BIN`                | Override binary path (used by the test suite).                                                                     |
-| `CURSOR_PLUGIN_CC_HOME`           | Override the jobs-registry root (default `~/.cursor-plugin-cc`).                                                   |
+| `CURSOR_PLUGIN_CC_HOME`           | Override the jobs-registry root. Default: an existing `~/.cursor-plugin-cc` if present, else Claude Code's plugin data dir (`CLAUDE_PLUGIN_DATA/state`), else `~/.cursor-plugin-cc`. |
 | `CURSOR_PLUGIN_CC_DEFAULT_MODEL`  | Default `--model` when none is passed. Accepts the same aliases as `--model` (e.g. `composer`, `opus`). Falls back to `auto`. |
 
 A repo-local `.cursor-plugin-cc.json` is on the roadmap for overriding the default model per repo; until then, set `--model` per invocation or pin `CURSOR_PLUGIN_CC_DEFAULT_MODEL` in your shell.

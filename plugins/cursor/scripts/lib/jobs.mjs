@@ -11,6 +11,12 @@ import { join } from 'node:path';
 import { ensureDir, jobsDir, logsDir } from './paths.mjs';
 
 /**
+ * Set by the SessionStart hook (via CLAUDE_ENV_FILE), so every job created
+ * from a Claude Code session carries the id of the session that started it.
+ */
+export const SESSION_ID_ENV = 'CURSOR_PLUGIN_CC_SESSION_ID';
+
+/**
  * @typedef {'running'|'done'|'failed'|'cancelled'} JobStatus
  */
 
@@ -31,6 +37,7 @@ import { ensureDir, jobsDir, logsDir } from './paths.mjs';
  * @property {string[]=} filesTouched
  * @property {boolean=} background
  * @property {boolean=} cloud
+ * @property {string=} sessionId
  */
 
 /**
@@ -41,6 +48,7 @@ import { ensureDir, jobsDir, logsDir } from './paths.mjs';
  * @property {string} model
  * @property {boolean=} background
  * @property {boolean=} cloud
+ * @property {string=} sessionId
  */
 
 /**
@@ -82,6 +90,9 @@ function atomicWrite(target, data) {
 export function createJob(init) {
   ensureDir(jobsDir(init.repoPath));
   ensureDir(logsDir(init.repoPath));
+  // Stamp the owning Claude session so /cursor:status can scope its default
+  // view and the SessionEnd hook knows which running jobs belong to it.
+  const sessionId = init.sessionId ?? process.env[SESSION_ID_ENV];
   /** @type {JobRecord} */
   const record = {
     id: init.id,
@@ -93,6 +104,7 @@ export function createJob(init) {
     rawLogPath: rawLogPath(init.repoPath, init.id),
     ...(init.background ? { background: true } : {}),
     ...(init.cloud ? { cloud: true } : {}),
+    ...(sessionId && sessionId.trim() ? { sessionId: sessionId.trim() } : {}),
   };
   atomicWrite(jobFilePath(init.repoPath, init.id), JSON.stringify(record, null, 2));
   return record;
@@ -250,6 +262,21 @@ export async function cancelJob(repoPath, id, graceMs = 5_000) {
     status: 'cancelled',
     finishedAt: new Date().toISOString(),
   });
+}
+
+/**
+ * Jobs a given Claude session should see by default: its own, plus records
+ * with no session stamp (pre-hook jobs, or runs outside Claude Code) — those
+ * cannot be attributed, so hiding them would make them undiscoverable.
+ * Without a session id, everything is visible.
+ *
+ * @param {JobRecord[]} jobs
+ * @param {string|undefined} sessionId
+ * @returns {JobRecord[]}
+ */
+export function filterJobsForSession(jobs, sessionId) {
+  if (!sessionId) return jobs;
+  return jobs.filter((j) => !j.sessionId || j.sessionId === sessionId);
 }
 
 /**
