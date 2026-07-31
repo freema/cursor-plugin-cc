@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Fixed
+
+- **`/cursor:from-plan` no longer drops sections that map to no task slot** (#16). 0.5.1's verbatim pass-through only fires when _zero_ intents match, so a spec that partially matches still lost everything else. A PRP is the clearest case: `Why` → context, `Implementation Blueprint` → approach and `Validation Loop` → verification all resolve, so `Goal`, `What` / success criteria and `All Needed Context` — including its `CRITICAL:` gotchas — were discarded with no warning. Unclaimed sections are now carried through under `## Additional specification context`, preserving the author's original heading casing; only reviewer-facing commentary (`Effort / risks`, `Open questions`, `Alternatives considered`) is still dropped. A `## Goal` section now fills the Goal slot instead of the task file echoing its own title.
+
+### Added
+
+- **The `/cursor:from-plan` output directory is configurable** (#16). `tasks/` was hardcoded, so projects that already keep specs in `PRPs/`, `specs/` or `openspec/` grew a second, redundant tree. Resolution order is `--out-dir <dir>` → `CURSOR_PLUGIN_CC_TASKS_DIR` → the per-repo `tasksDir` config → `tasks/`. Relative values resolve against the repo root, so the destination is stable from any subdirectory. Set the per-repo default with `/cursor:setup --tasks-dir <dir>` (reset with `--no-tasks-dir`); the resolved value is shown in `/cursor:setup --doctor`.
+- **`/cursor:from-plan --in-place`** delegates the source spec exactly as written and creates no task file, for workflows where the spec already _is_ the task. It refuses a spec outside the repo, since Cursor resolves `@path` from the repo root.
+
+Defaults are unchanged: with no flag, no env var and no config, output still lands in `tasks/` and plan-mode conversions are byte-identical.
+
 ## 0.5.1 — from-plan pass-through for external spec formats
 
 ### Fixed
