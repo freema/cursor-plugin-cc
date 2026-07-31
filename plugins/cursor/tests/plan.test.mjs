@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   buildTaskContent,
+  isPlanModeFile,
   listPlans,
   parsePlanFile,
   resolvePlanPath,
@@ -65,6 +66,26 @@ describe('slugify', () => {
   it('truncates to 50 chars', () => {
     const long = 'a'.repeat(200);
     expect(slugify(long).length).toBeLessThanOrEqual(50);
+  });
+});
+
+describe('isPlanModeFile', () => {
+  const plansDir = '/home/u/.claude/plans';
+
+  it('recognises a file sitting directly in the plans dir', () => {
+    expect(isPlanModeFile('/home/u/.claude/plans/brand-new-plan.md', plansDir)).toBe(true);
+  });
+
+  it('treats a project spec as not plan-mode', () => {
+    expect(isPlanModeFile('/work/mono/PRPs/018-wizard.md', plansDir)).toBe(false);
+  });
+
+  it('does not match a nested subdirectory of the plans dir', () => {
+    expect(isPlanModeFile('/home/u/.claude/plans/archive/old.md', plansDir)).toBe(false);
+  });
+
+  it('normalises traversal before comparing', () => {
+    expect(isPlanModeFile('/home/u/.claude/plans/../plans/p.md', plansDir)).toBe(true);
   });
 });
 

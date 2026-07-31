@@ -10,4 +10,4 @@ Present the check results as-is. If any check failed, tell the user concretely w
 
 `--enable-review-gate` / `--disable-review-gate` toggle the per-repo stop-time review gate: when enabled, a Cursor model reviews each turn's edits before Claude Code is allowed to stop, and a `BLOCK` verdict keeps the turn going. Relay the confirmation message verbatim.
 
-`--tasks-dir <dir>` sets, per repository, where `/cursor:from-plan` writes generated task files — point it at `PRPs`, `specs`, or whatever directory the project's spec workflow already uses instead of the default `tasks/`. `--no-tasks-dir` resets it. Relay the confirmation message verbatim.
+`--tasks-dir <dir>` sets, per repository, a fallback directory for `/cursor:from-plan` task files. Most projects do not need it: when you pass a spec path, the task file is written next to that spec automatically, in whichever repo it lives. This key only applies to Claude's own plan-mode files, which have no project location to inherit. `--no-tasks-dir` resets it. Relay the confirmation message verbatim.

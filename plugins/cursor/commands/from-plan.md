@@ -13,12 +13,16 @@ Render the output verbatim. The command has two modes:
 
 Without arguments it picks the newest plan under `~/.claude/plans/`. Pass a name fragment (e.g. `dark-mode`) or any path (e.g. `PRPs/dark-mode.md`) to pick a specific one. `--list` shows the 15 most recent plan files.
 
-**Where the task file lands** — `tasks/` by default, overridable most- to least-specific:
+**Where the task file lands** — derived from the spec, most- to least-specific:
 
 1. `--out-dir <dir>` for a single run
-2. the `CURSOR_PLUGIN_CC_TASKS_DIR` environment variable
-3. the per-repo default: `/cursor:setup --tasks-dir PRPs` (reset with `--no-tasks-dir`)
+2. **the directory the source spec lives in** — pass `PRPs/018.md` and the task file joins it there, in whichever repo that is
+3. the `CURSOR_PLUGIN_CC_TASKS_DIR` environment variable
+4. the per-repo default: `/cursor:setup --tasks-dir PRPs` (reset with `--no-tasks-dir`)
+5. `tasks/`
 
-Relative values resolve against the repo root, so the destination does not move when you run the command from a subdirectory.
+Rule 2 means spec-driven projects need no configuration, and it keeps working when specs are centralised in one repo while code lives in siblings. Rules 3–5 only come into play for Claude's own plan-mode files, which have no project location to inherit. Relative values resolve against the repo root, so the destination does not move when you run the command from a subdirectory.
 
-**`--in-place`** skips the conversion entirely and delegates the source document as written — no task file is created. Use it when your spec already _is_ the task (PRP, Spec Kit, OpenSpec). The spec must live inside the repo, since Cursor resolves `@path` from the repo root.
+The spec may live **outside** the current repo. When it does, Cursor is handed an absolute path instead of `@path` (which cannot leave the repo root), and told to apply its changes in the current repository. Report that note to the user when it appears.
+
+**`--in-place`** skips the conversion entirely and delegates the source document as written — no task file is created. Use it when your spec already _is_ the task (PRP, Spec Kit, OpenSpec). Works across repos.

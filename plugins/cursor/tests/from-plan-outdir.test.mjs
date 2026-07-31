@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { DEFAULT_TASKS_DIR, main, resolveTasksDir } from '../scripts/from-plan.mjs';
+import { DEFAULT_TASKS_DIR, main, referenceFor, resolveTasksDir } from '../scripts/from-plan.mjs';
 import { makeTempHome } from './helpers.mjs';
 
 const PRP = `# PRP: Dark Mode Toggle
@@ -44,10 +44,40 @@ describe('resolveTasksDir', () => {
     tmp.cleanup();
   });
 
-  it('defaults to tasks/ under the repo root', () => {
+  it('defaults to tasks/ under the repo root when there is nothing to derive from', () => {
     const { dir, source } = resolveTasksDir(tmp.dir, undefined);
     expect(dir).toBe(join(tmp.dir, DEFAULT_TASKS_DIR));
     expect(source).toBe('default');
+  });
+
+  it("derives the destination from the source spec's own directory", () => {
+    const spec = join(tmp.dir, 'PRPs', '018-wizard.md');
+    const { dir, source } = resolveTasksDir(tmp.dir, undefined, spec);
+    expect(dir).toBe(join(tmp.dir, 'PRPs'));
+    expect(source).toBe('spec');
+  });
+
+  it('derives it even when the spec lives outside the repo entirely', () => {
+    // The multi-repo case: PRPs centralised in a sibling monorepo while the
+    // code being changed lives here. The task file must land beside its
+    // siblings, not in a new folder inside this repo.
+    const spec = join(tmp.dir, 'elsewhere', 'mono', 'PRPs', '018-wizard.md');
+    const { dir, source } = resolveTasksDir(join(tmp.dir, 'api'), undefined, spec);
+    expect(dir).toBe(join(tmp.dir, 'elsewhere', 'mono', 'PRPs'));
+    expect(source).toBe('spec');
+  });
+
+  it('lets an explicit --out-dir override the spec directory', () => {
+    const spec = join(tmp.dir, 'PRPs', '018-wizard.md');
+    const { dir, source } = resolveTasksDir(tmp.dir, 'tasks', spec);
+    expect(dir).toBe(join(tmp.dir, 'tasks'));
+    expect(source).toBe('flag');
+  });
+
+  it('prefers the spec directory over env and config', () => {
+    process.env.CURSOR_PLUGIN_CC_TASKS_DIR = 'specs';
+    const spec = join(tmp.dir, 'PRPs', '018-wizard.md');
+    expect(resolveTasksDir(tmp.dir, undefined, spec).source).toBe('spec');
   });
 
   it('honours the --out-dir flag, resolved against the repo root', () => {
@@ -133,22 +163,72 @@ describe('from-plan writes into the configured directory', () => {
     expect(out).toContain('@PRPs/dark-mode.md');
   });
 
-  it('--in-place refuses a spec that lives outside the repo', async () => {
-    const outside = join(tmp.dir, 'outside.md');
-    writeFileSync(outside, PRP, 'utf8');
-    let err = '';
-    vi.spyOn(process.stderr, 'write').mockImplementation((chunk) => {
-      err += String(chunk);
-      return true;
-    });
-    const code = await main(['--in-place', outside]);
-    expect(code).toBe(2);
-    expect(err).toContain('--in-place needs the plan to live inside the repo');
-  });
-
-  it('falls back to tasks/ when nothing is configured', async () => {
+  it('writes beside the source spec by default, with no configuration at all', async () => {
     const code = await main(['PRPs/dark-mode.md']);
     expect(code).toBe(0);
-    expect(readdirSync(join(repo, 'tasks'))).toHaveLength(1);
+    expect(existsSync(join(repo, 'tasks'))).toBe(false);
+    expect(readdirSync(join(repo, 'PRPs'))).toHaveLength(2);
+    expect(out).toContain("from the source spec's own directory");
+  });
+
+  describe('spec in a sibling repo (central spec directory)', () => {
+    let mono;
+    let spec;
+
+    beforeEach(() => {
+      mono = join(tmp.dir, 'mono');
+      mkdirSync(join(mono, 'PRPs'), { recursive: true });
+      spec = join(mono, 'PRPs', '018-wizard.md');
+      writeFileSync(spec, PRP, 'utf8');
+    });
+
+    it('lands the task file beside its siblings, not inside the code repo', async () => {
+      const code = await main([spec]);
+      expect(code).toBe(0);
+      // Nothing new in the code repo…
+      expect(existsSync(join(repo, 'tasks'))).toBe(false);
+      expect(readdirSync(join(repo, 'PRPs'))).toEqual(['dark-mode.md']);
+      // …and the task file joined the spec it came from.
+      expect(readdirSync(join(mono, 'PRPs'))).toHaveLength(2);
+    });
+
+    it('hands Cursor an absolute path, since @path cannot leave the repo', async () => {
+      await main([spec]);
+      expect(out).toContain(join(mono, 'PRPs'));
+      expect(out).toContain('lives outside this repository');
+      expect(out).not.toMatch(/@\.\./);
+    });
+
+    it('--in-place no longer refuses a spec outside the repo', async () => {
+      const code = await main(['--in-place', spec]);
+      expect(code).toBe(0);
+      expect(out).toContain('no task file written');
+      expect(out).toContain(spec);
+      expect(out).toContain('applies changes here');
+      // Still wrote nothing anywhere.
+      expect(readdirSync(join(mono, 'PRPs'))).toEqual(['018-wizard.md']);
+      expect(existsSync(join(repo, 'tasks'))).toBe(false);
+    });
+  });
+});
+
+describe('referenceFor', () => {
+  it('uses the @path shorthand inside the repo', () => {
+    const r = referenceFor('/repo', '/repo/PRPs/018.md');
+    expect(r).toEqual({ mention: '@PRPs/018.md', display: 'PRPs/018.md', inside: true });
+  });
+
+  it('falls back to the absolute path outside the repo', () => {
+    const r = referenceFor('/repo', '/mono/PRPs/018.md');
+    expect(r).toEqual({
+      mention: '/mono/PRPs/018.md',
+      display: '/mono/PRPs/018.md',
+      inside: false,
+    });
+  });
+
+  it('treats a sibling directory sharing a name prefix as outside', () => {
+    // `/repo-api` must not be mistaken for a child of `/repo`.
+    expect(referenceFor('/repo', '/repo-api/PRPs/018.md').inside).toBe(false);
   });
 });

@@ -10,12 +10,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **`/cursor:from-plan` no longer drops sections that map to no task slot** (#16). 0.5.1's verbatim pass-through only fires when _zero_ intents match, so a spec that partially matches still lost everything else. A PRP is the clearest case: `Why` → context, `Implementation Blueprint` → approach and `Validation Loop` → verification all resolve, so `Goal`, `What` / success criteria and `All Needed Context` — including its `CRITICAL:` gotchas — were discarded with no warning. Unclaimed sections are now carried through under `## Additional specification context`, preserving the author's original heading casing; only reviewer-facing commentary (`Effort / risks`, `Open questions`, `Alternatives considered`) is still dropped. A `## Goal` section now fills the Goal slot instead of the task file echoing its own title.
 
+### Changed
+
+- **The task destination is now derived from the spec instead of imposed by config** (#16). Point `/cursor:from-plan` at a project spec and the task file is written **next to it** — `PRPs/018-wizard.md` produces `PRPs/<stamp>-018-wizard.md`, beside its siblings — so spec-driven projects need no configuration at all. Full resolution order: `--out-dir <dir>` → the spec's own directory → `CURSOR_PLUGIN_CC_TASKS_DIR` → the per-repo `tasksDir` config → `tasks/`. The last three now only apply to Claude's own plan-mode files, which have no project location to inherit. This follows upstream [`openai/codex-plugin-cc`](https://github.com/openai/codex-plugin-cc), which never writes into the user's project tree at all — `tasks/` was an addition of this fork, not something inherited.
+
 ### Added
 
-- **The `/cursor:from-plan` output directory is configurable** (#16). `tasks/` was hardcoded, so projects that already keep specs in `PRPs/`, `specs/` or `openspec/` grew a second, redundant tree. Resolution order is `--out-dir <dir>` → `CURSOR_PLUGIN_CC_TASKS_DIR` → the per-repo `tasksDir` config → `tasks/`. Relative values resolve against the repo root, so the destination is stable from any subdirectory. Set the per-repo default with `/cursor:setup --tasks-dir <dir>` (reset with `--no-tasks-dir`); the resolved value is shown in `/cursor:setup --doctor`.
-- **`/cursor:from-plan --in-place`** delegates the source spec exactly as written and creates no task file, for workflows where the spec already _is_ the task. It refuses a spec outside the repo, since Cursor resolves `@path` from the repo root.
+- **Multi-repo support: the spec and the code no longer have to share a repository** (#16). A central spec directory (one monorepo holding PRPs for several sibling service repos) is now a first-class case. Running `/cursor:from-plan ~/work/mono/PRPs/018.md` from inside `~/work/api` writes the task file beside 001–017 in the monorepo — the API repo gets no stray `PRPs/` or `tasks/` folder — and hands Cursor an **absolute path** to it, since `@path` cannot resolve outside the repo `cursor-agent` runs in. Code changes still land in the invoking repo. Previously `--out-dir PRPs` silently created a second, disconnected `PRPs/` tree in the wrong repo, and `--in-place` refused outright.
+- **`/cursor:setup --tasks-dir <dir>`** (and `--no-tasks-dir`) persists a per-repo fallback directory, surfaced in `--doctor`. Rarely needed now that the destination is derived; it applies only to plan-mode files.
+- **`/cursor:from-plan --in-place`** delegates the source spec exactly as written and creates no task file, for workflows where the spec already _is_ the task. Works across repos.
 
-Defaults are unchanged: with no flag, no env var and no config, output still lands in `tasks/` and plan-mode conversions are byte-identical.
+Defaults are unchanged for the plan-mode flow: with no spec path, no flag, no env var and no config, output still lands in `tasks/` and plan-mode conversions are byte-identical.
 
 ## 0.5.1 — from-plan pass-through for external spec formats
 

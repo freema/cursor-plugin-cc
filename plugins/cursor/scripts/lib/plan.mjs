@@ -19,7 +19,7 @@
 
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 
 export const PLANS_DIR = join(homedir(), '.claude', 'plans');
 
@@ -98,6 +98,22 @@ export function resolvePlanPath(ref, plansDir = PLANS_DIR) {
   const needle = ref.toLowerCase();
   const match = listPlans(plansDir).find((p) => p.name.toLowerCase().includes(needle));
   return match?.path;
+}
+
+/**
+ * True when a resolved plan path is one of Claude's own plan-mode files rather
+ * than a spec that lives in the user's project.
+ *
+ * The distinction drives where a generated task file goes: a project spec knows
+ * its own home (write the task beside it — that works across repos and needs no
+ * configuration), while a plan-mode file has no project location to inherit.
+ *
+ * @param {string} planPath
+ * @param {string} [plansDir]
+ * @returns {boolean}
+ */
+export function isPlanModeFile(planPath, plansDir = PLANS_DIR) {
+  return resolve(dirname(planPath)) === resolve(plansDir);
 }
 
 /**
