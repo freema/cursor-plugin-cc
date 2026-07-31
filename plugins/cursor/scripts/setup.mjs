@@ -93,6 +93,20 @@ async function gatherDoctor() {
     },
   ]);
 
+  const envTasksDir = process.env.CURSOR_PLUGIN_CC_TASKS_DIR;
+  const cfgTasksDir = getConfig(root).tasksDir;
+  checks.push([
+    'from-plan output directory',
+    {
+      ok: true,
+      detail: envTasksDir?.trim()
+        ? `${envTasksDir.trim()} (from CURSOR_PLUGIN_CC_TASKS_DIR)`
+        : cfgTasksDir
+          ? `${cfgTasksDir} (repo config)`
+          : 'tasks/ (default — change with `--tasks-dir <dir>`)',
+    },
+  ]);
+
   const mcps = bin ? await listConfiguredMcps() : [];
 
   // The CURSOR_API_KEY check is already `ok:true` whether or not the key is
@@ -119,6 +133,34 @@ async function toggleReviewGate(enable) {
   } else {
     process.stdout.write('Stop review gate **disabled** for this repository.\n');
   }
+  return 0;
+}
+
+/**
+ * Persist (or clear) the directory `/cursor:from-plan` writes task files into.
+ * `--tasks-dir` with no value, or an explicit `--no-tasks-dir`, resets it to
+ * the built-in `tasks/`.
+ *
+ * @param {unknown} raw
+ * @returns {Promise<number>}
+ */
+async function setTasksDir(raw) {
+  const root = await repoRoot(process.cwd());
+  const value = typeof raw === 'string' ? raw.trim() : '';
+  if (!value || raw === false || raw === true) {
+    setConfigValue(root, 'tasksDir', null);
+    process.stdout.write(
+      'Task output directory **reset** to the default `tasks/` for this repository.\n',
+    );
+    return 0;
+  }
+  setConfigValue(root, 'tasksDir', value);
+  process.stdout.write(
+    `Task output directory set to \`${value}\` for this repository.\n\n` +
+      '`/cursor:from-plan` will write generated task files there instead of `tasks/`. ' +
+      'Override per run with `--out-dir <dir>`, or skip the task file entirely with `--in-place`. ' +
+      'Reset with `/cursor:setup --no-tasks-dir`.\n',
+  );
   return 0;
 }
 
@@ -234,6 +276,8 @@ export async function main(rawArgv) {
     'enable-review-gate',
     'disable-review-gate',
   ]);
+  const tasksDirFlag = flags['tasks-dir'] ?? flags['tasksDir'];
+  if (tasksDirFlag !== undefined) return setTasksDir(tasksDirFlag);
   if (flags['enable-review-gate'] || flags['enableReviewGate']) return toggleReviewGate(true);
   if (flags['disable-review-gate'] || flags['disableReviewGate']) return toggleReviewGate(false);
   // --json always emits the full structured doctor report — hooks and scripts

@@ -194,6 +194,8 @@ Examples:
 /cursor:from-plan                       # newest plan → tasks/ → print delegate command
 /cursor:from-plan dark-mode             # match on a plan name fragment
 /cursor:from-plan --delegate            # newest plan → tasks/ → delegate immediately
+/cursor:from-plan --out-dir PRPs        # write the task file next to your specs instead
+/cursor:from-plan --in-place PRPs/x.md  # no task file at all — delegate the spec as written
 /cursor:from-plan --delegate --model opus --background "some-slug"
 /cursor:from-plan --list                # show the 15 most recent plans
 ```
@@ -205,7 +207,26 @@ Examples:
 /cursor:from-plan --delegate docs/rfc-042.md
 ```
 
-Sections named like `Overview`, `Requirements`, `Design`, `Tasks`, or `Testing` are mapped onto the task shape; a document whose structure isn't recognised at all is embedded **verbatim** (with the guardrail block appended) instead of being reduced to placeholders. And if you don't need the task-file conversion, `/cursor:delegate "Implement @specs/checkout-flow/plan.md"` sends the file to Cursor directly.
+Sections named like `Overview`, `Requirements`, `Design`, `Tasks`, or `Testing` are mapped onto the task shape. **Sections that map to nothing are never dropped** — they are carried through under `## Additional specification context`, so a format richer than Claude's plan-mode shape (a PRP's `All Needed Context` and its `CRITICAL:` gotchas, Spec Kit's `Clarifications`, OpenSpec's `Deltas`) reaches Cursor intact. A document whose structure isn't recognised at all is embedded **verbatim** instead of being reduced to placeholders. Only reviewer-facing commentary (`Effort / risks`, `Open questions`, `Alternatives considered`) is deliberately left behind.
+
+**Where the task file goes.** `tasks/` is only the default, not a requirement — if your project already keeps specs in `PRPs/`, `specs/`, or `openspec/`, point the plugin there instead of growing a second parallel tree:
+
+```
+/cursor:setup --tasks-dir PRPs          # per-repo default, persisted
+/cursor:from-plan --out-dir PRPs        # just this run
+export CURSOR_PLUGIN_CC_TASKS_DIR=PRPs  # per-shell / CI
+/cursor:setup --no-tasks-dir            # back to tasks/
+```
+
+Precedence is `--out-dir` → `CURSOR_PLUGIN_CC_TASKS_DIR` → repo config → `tasks/`. Relative values resolve against the repo root, so the destination doesn't move when you run the command from a subdirectory.
+
+**Or skip the task file entirely.** When your spec already *is* the task, `--in-place` delegates the source document as written and creates nothing:
+
+```
+/cursor:from-plan --in-place --delegate PRPs/dark-mode.md
+```
+
+Same effect as `/cursor:delegate "Implement @PRPs/dark-mode.md"`, but it still resolves the plan by name fragment and prints the title first. (The spec must live inside the repo — Cursor resolves `@path` from the repo root.)
 
 This is the closest thing to "plan in Claude, execute in Cursor" in one session: Claude does the thinking, Cursor does the typing, and the task file is a durable contract between the two.
 

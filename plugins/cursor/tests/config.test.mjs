@@ -19,8 +19,17 @@ describe('config', () => {
     tmp.cleanup();
   });
 
-  it('defaults to stopReviewGate: false', () => {
-    expect(getConfig(repoA)).toEqual({ stopReviewGate: false });
+  it('defaults to stopReviewGate: false and no custom tasks dir', () => {
+    expect(getConfig(repoA)).toEqual({ stopReviewGate: false, tasksDir: null });
+  });
+
+  it('persists a per-repo tasks dir independently of the review gate', () => {
+    setConfigValue(repoA, 'tasksDir', 'PRPs');
+    expect(getConfig(repoA).tasksDir).toBe('PRPs');
+    expect(getConfig(repoA).stopReviewGate).toBe(false);
+    expect(getConfig(repoB).tasksDir).toBeNull();
+    setConfigValue(repoA, 'tasksDir', null);
+    expect(getConfig(repoA).tasksDir).toBeNull();
   });
 
   it('persists a toggled value per repo', () => {

@@ -138,6 +138,77 @@ describe('buildTaskContent', () => {
     expect(out.match(/# Externí spec/g)).toHaveLength(1);
   });
 
+  it('carries PRP sections that map to no intent instead of dropping them', () => {
+    // A PRP matches three intents (Why → context, Implementation Blueprint →
+    // approach, Validation Loop → verification), so the all-or-nothing verbatim
+    // fallback never fires. Goal / What / All Needed Context must still survive.
+    const raw = [
+      '# PRP: Dark Mode Toggle',
+      '',
+      '## Goal',
+      '',
+      'Ship a persisted dark-mode toggle.',
+      '',
+      '## Why',
+      '',
+      '- Night-shift users report eye strain.',
+      '',
+      '## What',
+      '',
+      '### Success Criteria',
+      '- [ ] Toggle persists across reloads',
+      '',
+      '## All Needed Context',
+      '',
+      '- file: src/theme/tokens.ts',
+      '- CRITICAL: SSR flashes light theme unless set in the inline head script',
+      '',
+      '## Implementation Blueprint',
+      '',
+      'Create `src/theme/ThemeProvider.tsx`.',
+      '',
+      '## Validation Loop',
+      '',
+      '`npm run lint && npm test`',
+      '',
+    ].join('\n');
+    const { title, sections, headings } = splitSections(raw);
+    const out = buildTaskContent({
+      path: '/tmp/PRPs/dark-mode.md',
+      title,
+      slug: 'prp-dark-mode-toggle',
+      sections,
+      headings,
+      raw,
+    });
+    // Mapped sections keep their structured slots…
+    expect(out).toContain('Night-shift users report eye strain.');
+    expect(out).toContain('Create `src/theme/ThemeProvider.tsx`.');
+    expect(out).toContain('npm run lint && npm test');
+    // …and the unmapped ones are no longer lost.
+    expect(out).toContain('## Additional specification context');
+    expect(out).toContain('Ship a persisted dark-mode toggle.');
+    expect(out).toContain('- [ ] Toggle persists across reloads');
+    expect(out).toContain('CRITICAL: SSR flashes light theme');
+    // Original heading casing is preserved, not flattened to lowercase.
+    expect(out).toContain('### All Needed Context');
+  });
+
+  it('still drops reviewer-only commentary from the leftovers', () => {
+    const { title, sections, headings } = splitSections(SAMPLE);
+    const out = buildTaskContent({
+      path: '/tmp/plan.md',
+      title,
+      slug: 'refactor-x',
+      sections,
+      headings,
+      raw: SAMPLE,
+    });
+    expect(out).not.toContain('Effort / risks');
+    expect(out).not.toContain('hand-rolled arg parser');
+    expect(out).not.toContain('## Additional specification context');
+  });
+
   it('maps common spec-driven headings onto the task sections', () => {
     const raw = [
       '# Spec-shaped plan',
