@@ -105,11 +105,11 @@ This is the entire happy path. Three commands inside Claude Code:
 
 What lives where after a run:
 
-| Path | Written by | Purpose |
-| ---- | ---------- | ------- |
-| `~/.claude/plans/<slug>.md` | Claude (plan mode) | Source of truth for the plan |
-| `tasks/<YYYYMMDD-HHmm>-<slug>.md` | This plugin | Cursor-shaped contract — **commit this** |
-| `<your source files>` | Cursor | The actual code change |
+| Path                              | Written by         | Purpose                                  |
+| --------------------------------- | ------------------ | ---------------------------------------- |
+| `~/.claude/plans/<slug>.md`       | Claude (plan mode) | Source of truth for the plan             |
+| `tasks/<YYYYMMDD-HHmm>-<slug>.md` | This plugin        | Cursor-shaped contract — **commit this** |
+| `<your source files>`             | Cursor             | The actual code change                   |
 
 **Iterate:** if Claude's review of the diff finds something, just run `/cursor:resume "fix X"` — same Cursor chat, no replanning. For a fresh slice, run `/cursor:from-plan --delegate` again with a new plan, or `/cursor:delegate "<task>"` directly without plan mode.
 
@@ -155,17 +155,17 @@ It is modelled on [`openai/codex-plugin-cc`](https://github.com/openai/codex-plu
 
 Hand a coding task to `cursor-agent -p …`.
 
-| Flag                   | Default                    | Effect                                                                                                                                                                                                                                                                                                                                                         |
-| ---------------------- | -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Flag                   | Default                                       | Effect                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| ---------------------- | --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `--model <id>`         | `auto` (or `$CURSOR_PLUGIN_CC_DEFAULT_MODEL`) | Aliases → real Cursor ids: `composer`/`fast` → `composer-2.5-fast`, `composer-full` → `composer-2.5`, `sonnet` → `claude-4.6-sonnet-medium`, `opus` → `claude-opus-4-7-high`, `gpt`/`codex` → `gpt-5.3-codex`, `grok` → `grok-4.3`, `gemini` → `gemini-3.1-pro`, `auto` → `auto`. Unknown or retired ids (e.g. `composer-2`, `composer-2-fast`) are forwarded as-is. `auto` lets Cursor pick whatever model your account is entitled to — safe if you don't have a Composer seat. Run `/cursor:setup --print-models` for the live list. |
-| `--background`         | off                        | Detach; the command returns a job id immediately.                                                                                                                                                                                                                                                                                                              |
-| `--wait`               | on (if not `--background`) | Block until finished.                                                                                                                                                                                                                                                                                                                                          |
-| `--fresh`              | off                        | Start a brand-new Cursor session (no resume).                                                                                                                                                                                                                                                                                                                  |
-| `--resume[=<chat-id>]` | off                        | Resume a prior chat. With no id, resume the latest for this repo.                                                                                                                                                                                                                                                                                              |
-| `--no-force`           | `--force` is ON            | Disable auto-approve (paranoid mode).                                                                                                                                                                                                                                                                                                                          |
-| `--cloud`              | off                        | Pass `-c` to cursor-agent.                                                                                                                                                                                                                                                                                                                                     |
-| `--timeout <sec>`      | `1800`                     | Kill the job if it exceeds this.                                                                                                                                                                                                                                                                                                                               |
-| `--no-git-check`       | off                        | Allow running outside a git repo.                                                                                                                                                                                                                                                                                                                              |
+| `--background`         | off                                           | Detach; the command returns a job id immediately.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `--wait`               | on (if not `--background`)                    | Block until finished.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `--fresh`              | off                                           | Start a brand-new Cursor session (no resume).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `--resume[=<chat-id>]` | off                                           | Resume a prior chat. With no id, resume the latest for this repo.                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `--no-force`           | `--force` is ON                               | Disable auto-approve (paranoid mode).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `--cloud`              | off                                           | Pass `-c` to cursor-agent.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `--timeout <sec>`      | `1800`                                        | Kill the job if it exceeds this.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `--no-git-check`       | off                                           | Allow running outside a git repo.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 
 Examples:
 
@@ -194,6 +194,8 @@ Examples:
 /cursor:from-plan                       # newest plan → tasks/ → print delegate command
 /cursor:from-plan dark-mode             # match on a plan name fragment
 /cursor:from-plan --delegate            # newest plan → tasks/ → delegate immediately
+/cursor:from-plan --out-dir PRPs        # write the task file next to your specs instead
+/cursor:from-plan --in-place PRPs/x.md  # no task file at all — delegate the spec as written
 /cursor:from-plan --delegate --model opus --background "some-slug"
 /cursor:from-plan --list                # show the 15 most recent plans
 ```
@@ -205,7 +207,33 @@ Examples:
 /cursor:from-plan --delegate docs/rfc-042.md
 ```
 
-Sections named like `Overview`, `Requirements`, `Design`, `Tasks`, or `Testing` are mapped onto the task shape; a document whose structure isn't recognised at all is embedded **verbatim** (with the guardrail block appended) instead of being reduced to placeholders. And if you don't need the task-file conversion, `/cursor:delegate "Implement @specs/checkout-flow/plan.md"` sends the file to Cursor directly.
+Sections named like `Overview`, `Requirements`, `Design`, `Tasks`, or `Testing` are mapped onto the task shape. **Sections that map to nothing are never dropped** — they are carried through under `## Additional specification context`, so a format richer than Claude's plan-mode shape (a PRP's `All Needed Context` and its `CRITICAL:` gotchas, Spec Kit's `Clarifications`, OpenSpec's `Deltas`) reaches Cursor intact. A document whose structure isn't recognised at all is embedded **verbatim** instead of being reduced to placeholders. Only reviewer-facing commentary (`Effort / risks`, `Open questions`, `Alternatives considered`) is deliberately left behind.
+
+**Where the task file goes — derived, not configured.** Point the command at a spec and the task file is written **next to it**. `PRPs/018-wizard.md` produces `PRPs/<stamp>-018-wizard.md`, beside its siblings. A spec already says where it belongs, so there is nothing to set up:
+
+```
+/cursor:from-plan PRPs/018-wizard.md     # → PRPs/<stamp>-018-wizard.md
+/cursor:from-plan specs/checkout.md      # → specs/<stamp>-checkout.md
+```
+
+`tasks/` is the fallback for Claude's own plan-mode files, which have no project location to inherit. Override with `--out-dir <dir>`, `CURSOR_PLUGIN_CC_TASKS_DIR`, or a per-repo default via `/cursor:setup --tasks-dir <dir>` (reset with `--no-tasks-dir`). Full precedence: `--out-dir` → the spec's own directory → env var → repo config → `tasks/`.
+
+**Multi-repo works out of the box.** Nothing here assumes the spec and the code share a repository. Keep your PRPs centralised in one monorepo and run the command from whichever service repo you're changing:
+
+```
+cd ~/work/breviabook-api
+/cursor:from-plan --delegate ~/work/breviabook/PRPs/018-wizard.md
+```
+
+The task file joins 001–017 in the monorepo — the API repo gets no stray `PRPs/` or `tasks/` folder — and Cursor receives an **absolute path** to it, since `@path` cannot reach outside the repo it runs in. Code changes still land in the repo you invoked from.
+
+**Or skip the task file entirely.** When your spec already _is_ the task, `--in-place` delegates the source document as written and creates nothing:
+
+```
+/cursor:from-plan --in-place --delegate PRPs/dark-mode.md
+```
+
+Same effect as `/cursor:delegate "Implement @PRPs/dark-mode.md"`, but it still resolves the plan by name fragment and prints the title first. Works across repos too.
 
 This is the closest thing to "plan in Claude, execute in Cursor" in one session: Claude does the thinking, Cursor does the typing, and the task file is a durable contract between the two.
 
@@ -217,16 +245,16 @@ By default it picks the target automatically: a dirty working tree is reviewed a
 
 **Wait or background?** If you don't pass `--wait` or `--background`, the command first estimates the diff size (`git status` / `git diff --shortstat`) and asks once whether to wait for the result or run it in the background — recommending background for anything beyond a tiny 1–2 file change, since a multi-file review can take a while. Pass `--wait` or `--background` explicitly to skip the question.
 
-| Flag                                 | Default           | Effect                                                                                             |
-| ------------------------------------ | ----------------- | ------------------------------------------------------------------------------------------------- |
-| `--base <ref>`                       | auto              | Review the branch diff `<ref>...HEAD` (merge-base) instead of the working tree.                    |
-| `--scope auto\|working-tree\|branch` | `auto`            | Force the target. `working-tree` = uncommitted changes; `branch` = vs the detected default branch. |
-| `--adversarial`                      | off               | Challenge the design and assumptions, not just implementation defects. Prefer the dedicated [`/cursor:adversarial-review`](#cursoradversarial-review-flags-focus) command; this flag is kept for backward compatibility. |
-| `--model <id>`                       | `auto`            | Same aliases as `/cursor:delegate`. Use `gpt`/`opus`/`gemini` for a deeper review.                 |
-| `--background`                       | off               | Detach; returns a job id immediately. Read it later with `/cursor:result`.                         |
-| `--wait`                             | on                | Block until the review finishes (default unless `--background`).                                   |
-| `--timeout <sec>`                    | `1800`            | Kill the review if it exceeds this.                                                                |
-| `--no-git-check`                     | off               | Allow running outside a git repo (rarely useful — there is no diff to review).                     |
+| Flag                                 | Default | Effect                                                                                                                                                                                                                   |
+| ------------------------------------ | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `--base <ref>`                       | auto    | Review the branch diff `<ref>...HEAD` (merge-base) instead of the working tree.                                                                                                                                          |
+| `--scope auto\|working-tree\|branch` | `auto`  | Force the target. `working-tree` = uncommitted changes; `branch` = vs the detected default branch.                                                                                                                       |
+| `--adversarial`                      | off     | Challenge the design and assumptions, not just implementation defects. Prefer the dedicated [`/cursor:adversarial-review`](#cursoradversarial-review-flags-focus) command; this flag is kept for backward compatibility. |
+| `--model <id>`                       | `auto`  | Same aliases as `/cursor:delegate`. Use `gpt`/`opus`/`gemini` for a deeper review.                                                                                                                                       |
+| `--background`                       | off     | Detach; returns a job id immediately. Read it later with `/cursor:result`.                                                                                                                                               |
+| `--wait`                             | on      | Block until the review finishes (default unless `--background`).                                                                                                                                                         |
+| `--timeout <sec>`                    | `1800`  | Kill the review if it exceeds this.                                                                                                                                                                                      |
+| `--no-git-check`                     | off     | Allow running outside a git repo (rarely useful — there is no diff to review).                                                                                                                                           |
 
 Examples:
 
@@ -343,10 +371,10 @@ Review runs also emit a machine-readable verdict: the review prompt asks for a t
 
 The plugin registers Claude Code hooks (`hooks/hooks.json`):
 
-- **SessionStart** exports the Claude session id into the session's environment, so every job created from that session is stamped with it. `/cursor:status` uses the stamp to scope its default view to *your* jobs — parallel Claude sessions in the same repo stop seeing each other's runs (use `--all` for everything).
+- **SessionStart** exports the Claude session id into the session's environment, so every job created from that session is stamped with it. `/cursor:status` uses the stamp to scope its default view to _your_ jobs — parallel Claude sessions in the same repo stop seeing each other's runs (use `--all` for everything).
 - **SessionEnd** cancels the session's still-running jobs. Background delegates run as detached workers, so without this a closed Claude session would leave `cursor-agent` running unattended. Jobs from other sessions — or jobs with no session stamp — are left alone.
 
-If you *want* a run to outlive the session, start it outside the hook's reach (e.g. `node scripts/delegate.mjs` from a plain terminal) — jobs without a session stamp are never auto-cancelled.
+If you _want_ a run to outlive the session, start it outside the hook's reach (e.g. `node scripts/delegate.mjs` from a plain terminal) — jobs without a session stamp are never auto-cancelled.
 
 ## The two-phase loop
 
@@ -442,12 +470,12 @@ The task file stays in `tasks/` as a durable record — the contract between pla
 
 ## Configuration
 
-| Env var                           | Purpose                                                                                                            |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `CURSOR_API_KEY`                  | Forwarded to `cursor-agent`. Optional — `cursor-agent login` is usually enough.                                    |
-| `CURSOR_AGENT_BIN`                | Override binary path (used by the test suite).                                                                     |
-| `CURSOR_PLUGIN_CC_HOME`           | Override the jobs-registry root. Default: an existing `~/.cursor-plugin-cc` if present, else Claude Code's plugin data dir (`CLAUDE_PLUGIN_DATA/state`), else `~/.cursor-plugin-cc`. |
-| `CURSOR_PLUGIN_CC_DEFAULT_MODEL`  | Default `--model` when none is passed. Accepts the same aliases as `--model` (e.g. `composer`, `opus`). Falls back to `auto`. |
+| Env var                          | Purpose                                                                                                                                                                              |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `CURSOR_API_KEY`                 | Forwarded to `cursor-agent`. Optional — `cursor-agent login` is usually enough.                                                                                                      |
+| `CURSOR_AGENT_BIN`               | Override binary path (used by the test suite).                                                                                                                                       |
+| `CURSOR_PLUGIN_CC_HOME`          | Override the jobs-registry root. Default: an existing `~/.cursor-plugin-cc` if present, else Claude Code's plugin data dir (`CLAUDE_PLUGIN_DATA/state`), else `~/.cursor-plugin-cc`. |
+| `CURSOR_PLUGIN_CC_DEFAULT_MODEL` | Default `--model` when none is passed. Accepts the same aliases as `--model` (e.g. `composer`, `opus`). Falls back to `auto`.                                                        |
 
 A repo-local `.cursor-plugin-cc.json` is on the roadmap for overriding the default model per repo; until then, set `--model` per invocation or pin `CURSOR_PLUGIN_CC_DEFAULT_MODEL` in your shell.
 

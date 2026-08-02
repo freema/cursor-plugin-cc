@@ -1,7 +1,19 @@
 #!/usr/bin/env node
-// /cursor:from-plan — convert a Claude Code plan file into a task file under
-// `tasks/` in the current repo, and optionally hand it off to Cursor via
-// `/cursor:delegate @tasks/<file>`.
+// /cursor:from-plan — convert a Claude Code plan file into a task file inside
+// the repo, and optionally hand it off to Cursor via `/cursor:delegate @<file>`.
+//
+// The destination is derived, not imposed. When the plan is a spec from the
+// user's project, the task file is written beside it — a spec already knows
+// where it belongs, and that answer stays correct no matter which repository
+// the command runs from. `tasks/` is only the fallback for Claude's own
+// plan-mode files, which have no project location to inherit; `--out-dir`,
+// `CURSOR_PLUGIN_CC_TASKS_DIR` and the per-repo `tasksDir` config override.
+// `--in-place` skips the generated file altogether.
+//
+// None of this assumes the spec and the code share a repository. A central
+// spec directory (a monorepo holding PRPs for several sibling service repos)
+// is a first-class case: the task file lands next to its siblings, and Cursor
+// receives an absolute path to it rather than an unreachable `@path`.
 //
 // Typical flow:
 //   1. User runs /plan mode in Claude Code, Claude writes a plan to
@@ -16,11 +28,18 @@
 
 import { existsSync, writeFileSync } from 'node:fs';
 import { mkdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { collapseCommandArgv, parseArgv, parseTimeout } from './lib/args.mjs';
 import { main as delegateMain } from './delegate.mjs';
+import { getConfig } from './lib/config.mjs';
 import { isGitRepo, repoRoot } from './lib/git.mjs';
-import { buildTaskContent, listPlans, parsePlanFile, resolvePlanPath } from './lib/plan.mjs';
+import {
+  buildTaskContent,
+  isPlanModeFile,
+  listPlans,
+  parsePlanFile,
+  resolvePlanPath,
+} from './lib/plan.mjs';
 import { invokedAsScript as __isScript } from './lib/invoked.mjs';
 
 const BOOLEAN_FLAGS = [
@@ -32,7 +51,10 @@ const BOOLEAN_FLAGS = [
   'git-check',
   'list',
   'help',
+  'in-place',
 ];
+
+export const DEFAULT_TASKS_DIR = 'tasks';
 
 function parseFlags(argv) {
   const { positional, flags } = parseArgv(argv, BOOLEAN_FLAGS);
@@ -45,6 +67,13 @@ function parseFlags(argv) {
   const list = Boolean(flags['list']);
   const model = typeof flags['model'] === 'string' ? flags['model'] : undefined;
   const timeout = 'timeout' in flags ? parseTimeout(flags['timeout']) : undefined;
+  const outDir =
+    typeof flags['outDir'] === 'string'
+      ? flags['outDir']
+      : typeof flags['out-dir'] === 'string'
+        ? flags['out-dir']
+        : undefined;
+  const inPlace = Boolean(flags['inPlace'] || flags['in-place']);
   const planRef = positional[0];
   return {
     planRef,
@@ -56,7 +85,81 @@ function parseFlags(argv) {
     list,
     model,
     timeout,
+    outDir,
+    inPlace,
   };
+}
+
+/**
+ * Resolve where the generated task file lands, most- to least-explicit:
+ *   1. `--out-dir <dir>`
+ *   2. the directory the source spec itself lives in
+ *   3. `CURSOR_PLUGIN_CC_TASKS_DIR`
+ *   4. the per-repo `tasksDir` config key (`/cursor:setup --tasks-dir <dir>`)
+ *   5. `tasks/`
+ *
+ * Rule 2 is what makes this work across repositories. A project spec already
+ * says where it belongs, so the task file is written next to it — `PRPs/018.md`
+ * produces `PRPs/<stamp>-018.md`, beside its siblings, whichever repo the
+ * command runs from. Configuration is only consulted for Claude's own
+ * plan-mode files, which have no project location to inherit.
+ *
+ * A relative value is resolved against the repo root, not the CWD, so the
+ * destination does not move when the command runs from a subdirectory.
+ *
+ * @param {string} root
+ * @param {string|undefined} flagValue
+ * @param {string} [planPath]   Resolved source plan; supplies rule 2.
+ * @returns {{ dir: string, source: 'flag'|'spec'|'env'|'config'|'default' }}
+ */
+export function resolveTasksDir(root, flagValue, planPath) {
+  const env = process.env.CURSOR_PLUGIN_CC_TASKS_DIR;
+  const specDir = planPath && !isPlanModeFile(planPath) ? dirname(resolve(planPath)) : undefined;
+  /** @type {Array<['flag'|'spec'|'env'|'config'|'default', string|null|undefined]>} */
+  const candidates = [
+    ['flag', flagValue],
+    ['spec', specDir],
+    ['env', env && env.trim() ? env.trim() : undefined],
+    ['config', getConfig(root).tasksDir],
+    ['default', DEFAULT_TASKS_DIR],
+  ];
+  for (const [source, value] of candidates) {
+    if (typeof value !== 'string' || !value.trim()) continue;
+    const raw = value.trim();
+    return { dir: isAbsolute(raw) ? raw : resolve(root, raw), source };
+  }
+  return { dir: resolve(root, DEFAULT_TASKS_DIR), source: 'default' };
+}
+
+/**
+ * Build the reference Cursor should follow to reach a file.
+ *
+ * Inside the repo we use the `@path` shorthand Cursor resolves from the repo
+ * root. Outside it — a spec kept in a sibling monorepo while the code lives
+ * here — `@path` cannot reach, so we hand over the absolute path instead;
+ * `cursor-agent` reads those fine. This is what lets one central spec
+ * directory drive work in many repositories.
+ *
+ * @param {string} root
+ * @param {string} fullPath
+ * @returns {{ mention: string, display: string, inside: boolean }}
+ */
+export function referenceFor(root, fullPath) {
+  const rel = relative(root, fullPath);
+  const inside = rel !== '' && !rel.startsWith('..') && !isAbsolute(rel);
+  return inside
+    ? { mention: `@${rel}`, display: rel, inside: true }
+    : { mention: fullPath, display: fullPath, inside: false };
+}
+
+/**
+ * @param {{ mention: string, inside: boolean }} ref
+ * @returns {string}
+ */
+function delegatePrompt(ref) {
+  return ref.inside
+    ? `Implement the task described in ${ref.mention}. Follow every section.`
+    : `Read the specification file at ${ref.mention} (it lives outside this repository) and implement it here. Follow every section. Apply all code changes in the current repository.`;
 }
 
 function timestamp() {
@@ -92,8 +195,7 @@ function renderPlansList() {
   return lines.join('\n') + '\n';
 }
 
-function writeTaskFile(root, slug, content) {
-  const tasksDir = join(root, 'tasks');
+function writeTaskFile(tasksDir, slug, content) {
   if (!existsSync(tasksDir)) mkdirSync(tasksDir, { recursive: true });
   const stamp = timestamp();
   // Avoid clobbering a task generated for the same plan in the same second.
@@ -144,23 +246,57 @@ export async function main(rawArgv) {
     return 2;
   }
 
-  const taskContent = buildTaskContent(plan);
-  const { fullPath } = writeTaskFile(root, plan.slug, taskContent);
-  const relPath = fullPath.startsWith(root + '/') ? fullPath.slice(root.length + 1) : fullPath;
+  // `--in-place`: the spec IS the task. Write nothing, delegate the source
+  // document as-is. This is the lossless path for PRP / Spec Kit / OpenSpec
+  // workflows, where a converted copy would only drift from the original.
+  // The spec may live outside this repo (a central spec directory driving many
+  // repos) — `referenceFor` hands Cursor an absolute path in that case.
+  let ref;
+  if (flags.inPlace) {
+    ref = referenceFor(root, planPath);
+    process.stdout.write(`### Delegating the spec in place\n\n`);
+    process.stdout.write(`- **Spec:** \`${ref.display}\` (no task file written)\n`);
+    if (!ref.inside) {
+      process.stdout.write(
+        `- **Note:** the spec lives outside this repo; Cursor reads it by absolute path and applies changes here.\n`,
+      );
+    }
+    process.stdout.write(`- **Title:** ${plan.title || '(untitled)'}\n\n`);
+  } else {
+    const { dir: tasksDir, source } = resolveTasksDir(root, flags.outDir, planPath);
+    const taskContent = buildTaskContent(plan);
+    const { fullPath } = writeTaskFile(tasksDir, plan.slug, taskContent);
+    ref = referenceFor(root, fullPath);
 
-  process.stdout.write(`### Task file created\n\n`);
-  process.stdout.write(`- **Source plan:** \`${planPath}\`\n`);
-  process.stdout.write(`- **Task file:** \`${relPath}\`\n`);
-  process.stdout.write(`- **Title:** ${plan.title || '(untitled)'}\n\n`);
+    process.stdout.write(`### Task file created\n\n`);
+    process.stdout.write(`- **Source plan:** \`${planPath}\`\n`);
+    process.stdout.write(`- **Task file:** \`${ref.display}\`\n`);
+    if (source !== 'default') {
+      const label = {
+        flag: '--out-dir',
+        spec: "the source spec's own directory",
+        env: 'CURSOR_PLUGIN_CC_TASKS_DIR',
+        config: 'repo config',
+      };
+      process.stdout.write(`- **Output directory:** from ${label[source]}\n`);
+    }
+    process.stdout.write(`- **Title:** ${plan.title || '(untitled)'}\n\n`);
+  }
 
   if (!flags.shouldDelegate) {
     process.stdout.write('---\n\n');
-    process.stdout.write('Review the task file, then delegate it to Cursor:\n\n');
+    process.stdout.write(
+      flags.inPlace
+        ? 'Review the spec, then delegate it to Cursor:\n\n'
+        : 'Review the task file, then delegate it to Cursor:\n\n',
+    );
     process.stdout.write('```\n');
     const modelFlag = flags.model ? ` --model ${flags.model}` : '';
     const bgFlag = flags.background ? ' --background' : '';
     const freshFlag = flags.fresh ? ' --fresh' : '';
-    process.stdout.write(`/cursor:delegate${modelFlag}${bgFlag}${freshFlag} @${relPath}\n`);
+    process.stdout.write(
+      `/cursor:delegate${modelFlag}${bgFlag}${freshFlag} ${delegatePrompt(ref)}\n`,
+    );
     process.stdout.write('```\n\n');
     process.stdout.write(
       'Re-run with `--delegate` (or `--yes`) to skip the review and hand it off right away.\n',
@@ -168,8 +304,8 @@ export async function main(rawArgv) {
     return 0;
   }
 
-  // Auto-delegate: call delegate.mjs in-process. We pass the task file as
-  // part of the prompt using the same `@path` convention Claude Code uses.
+  // Auto-delegate: call delegate.mjs in-process. Inside the repo we use the
+  // `@path` convention Claude Code uses; outside it, an absolute path.
   const delegateArgs = [];
   if (flags.noGitCheck) delegateArgs.push('--no-git-check');
   if (flags.model) delegateArgs.push('--model', flags.model);
@@ -177,7 +313,7 @@ export async function main(rawArgv) {
   if (flags.fresh) delegateArgs.push('--fresh');
   if (!flags.force) delegateArgs.push('--no-force');
   if (typeof flags.timeout === 'number') delegateArgs.push('--timeout', String(flags.timeout));
-  delegateArgs.push('--', `Implement the task described in @${relPath}. Follow every section.`);
+  delegateArgs.push('--', delegatePrompt(ref));
 
   process.stdout.write('---\n\nHanding off to Cursor…\n\n');
   return delegateMain(delegateArgs);

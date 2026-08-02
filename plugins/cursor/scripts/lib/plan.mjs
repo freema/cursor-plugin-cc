@@ -19,7 +19,7 @@
 
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 
 export const PLANS_DIR = join(homedir(), '.claude', 'plans');
 
@@ -41,6 +41,7 @@ function isFile(p) {
  * @property {string} title               First `# ` heading text. May be empty.
  * @property {string} slug                kebab-case slug derived from title (or file stem).
  * @property {Object<string, string>} sections   Section body by lowercased heading key.
+ * @property {Object<string, string>} [headings] Lowercased key → original heading text.
  * @property {string} raw                 Full file contents.
  */
 
@@ -100,16 +101,37 @@ export function resolvePlanPath(ref, plansDir = PLANS_DIR) {
 }
 
 /**
+ * True when a resolved plan path is one of Claude's own plan-mode files rather
+ * than a spec that lives in the user's project.
+ *
+ * The distinction drives where a generated task file goes: a project spec knows
+ * its own home (write the task beside it — that works across repos and needs no
+ * configuration), while a plan-mode file has no project location to inherit.
+ *
+ * @param {string} planPath
+ * @param {string} [plansDir]
+ * @returns {boolean}
+ */
+export function isPlanModeFile(planPath, plansDir = PLANS_DIR) {
+  return resolve(dirname(planPath)) === resolve(plansDir);
+}
+
+/**
  * Split a plan markdown into (heading → body) pairs keyed by lowercased heading.
  * Only `## ` headings are split — deeper headings stay inside the section body.
  *
  * @param {string} content
- * @returns {{ title: string, sections: Object<string, string> }}
+ * @returns {{ title: string, sections: Object<string, string>, headings: Object<string, string> }}
  */
 export function splitSections(content) {
   const lines = content.split('\n');
   /** @type {Object<string, string>} */
   const sections = {};
+  // Lowercased key → the heading exactly as the author wrote it, so a
+  // pass-through section keeps its original casing instead of being flattened
+  // to "## all needed context".
+  /** @type {Object<string, string>} */
+  const headings = {};
   let title = '';
   let currentKey = '';
   /** @type {string[]} */
@@ -139,14 +161,16 @@ export function splitSections(content) {
       const h2 = /^##\s+(.+?)\s*$/.exec(line);
       if (h2) {
         flush();
-        currentKey = h2[1].trim().toLowerCase();
+        const heading = h2[1].trim();
+        currentKey = heading.toLowerCase();
+        if (!(currentKey in headings)) headings[currentKey] = heading;
         continue;
       }
     }
     buffer.push(line);
   }
   flush();
-  return { title, sections };
+  return { title, sections, headings };
 }
 
 /**
@@ -157,9 +181,9 @@ export function splitSections(content) {
  */
 export function parsePlanFile(path) {
   const raw = readFileSync(path, 'utf8');
-  const { title, sections } = splitSections(raw);
+  const { title, sections, headings } = splitSections(raw);
   const slug = slugify(title || path.replace(/\.md$/, '').split('/').pop() || 'plan');
-  return { path, title, slug, sections, raw };
+  return { path, title, slug, sections, headings, raw };
 }
 
 /**
@@ -223,14 +247,38 @@ const SECTION_HINTS = {
   ],
 };
 
+// Plan-mode commentary that is written for the human reviewer, not for the
+// implementing agent. These are dropped on purpose and never surface in the
+// leftover pass-through below.
+const DROPPED_SECTIONS = [
+  'effort / risks',
+  'effort/risks',
+  'effort',
+  'risks',
+  'risk',
+  'open questions',
+  'alternatives considered',
+  'notes to reviewer',
+];
+
 /**
- * Pick the first matching section for a given intent.
+ * @param {string} key
+ * @returns {boolean}
+ */
+function isDroppedSection(key) {
+  return DROPPED_SECTIONS.some(
+    (d) => key === d || key.startsWith(`${d}:`) || key.startsWith(`${d} `),
+  );
+}
+
+/**
+ * Find the section KEY that satisfies a given intent, or '' when none does.
  *
  * @param {Object<string, string>} sections
  * @param {'context'|'approach'|'files'|'verification'} intent
  * @returns {string}
  */
-export function pickSection(sections, intent) {
+export function pickSectionKey(sections, intent) {
   const hints = SECTION_HINTS[intent];
   const keys = Object.keys(sections);
   // Hints are ordered most- to least-specific; iterate them in the OUTER loop
@@ -239,11 +287,23 @@ export function pickSection(sections, intent) {
   for (const hint of hints) {
     for (const key of keys) {
       if (key === hint || key.startsWith(`${hint}:`) || key.startsWith(`${hint} `)) {
-        return sections[key];
+        return key;
       }
     }
   }
   return '';
+}
+
+/**
+ * Pick the first matching section for a given intent.
+ *
+ * @param {Object<string, string>} sections
+ * @param {'context'|'approach'|'files'|'verification'} intent
+ * @returns {string}
+ */
+export function pickSection(sections, intent) {
+  const key = pickSectionKey(sections, intent);
+  return key ? sections[key] : '';
 }
 
 /**
@@ -253,10 +313,31 @@ export function pickSection(sections, intent) {
  * @returns {string}
  */
 export function buildTaskContent(plan) {
-  const context = pickSection(plan.sections, 'context');
-  const approach = pickSection(plan.sections, 'approach');
-  const files = pickSection(plan.sections, 'files');
-  const verification = pickSection(plan.sections, 'verification');
+  const contextKey = pickSectionKey(plan.sections, 'context');
+  const approachKey = pickSectionKey(plan.sections, 'approach');
+  const filesKey = pickSectionKey(plan.sections, 'files');
+  const verificationKey = pickSectionKey(plan.sections, 'verification');
+  const context = contextKey ? plan.sections[contextKey] : '';
+  const approach = approachKey ? plan.sections[approachKey] : '';
+  const files = filesKey ? plan.sections[filesKey] : '';
+  const verification = verificationKey ? plan.sections[verificationKey] : '';
+
+  // Anything the four intents did not claim. Previously these were dropped on
+  // the floor whenever at least one intent matched — which is exactly what
+  // happens to a PRP (`Goal`, `What`, `All Needed Context` all vanish) or any
+  // other spec richer than Claude's plan-mode shape. Carrying them through
+  // verbatim keeps the conversion lossless in every format.
+  // A spec that states its own goal (PRP's `## Goal`) should fill the Goal slot
+  // rather than be echoed under the leftovers while the slot repeats the title.
+  const goalKey = 'goal' in (plan.sections ?? {}) ? 'goal' : '';
+  const goal = goalKey ? String(plan.sections[goalKey]).trim() : '';
+
+  const claimed = new Set(
+    [goalKey, contextKey, approachKey, filesKey, verificationKey].filter(Boolean),
+  );
+  const leftovers = Object.keys(plan.sections ?? {}).filter(
+    (key) => !claimed.has(key) && !isDroppedSection(key) && String(plan.sections[key] ?? '').trim(),
+  );
 
   const lines = [];
   lines.push(`# ${plan.title || 'Delegated task'}`);
@@ -295,7 +376,7 @@ export function buildTaskContent(plan) {
 
   lines.push('## Goal');
   lines.push('');
-  lines.push(plan.title ? plan.title : '(see Context below)');
+  lines.push(goal || (plan.title ? plan.title : '(see Context below)'));
   lines.push('');
   lines.push('## Repo context');
   lines.push('');
@@ -320,8 +401,33 @@ export function buildTaskContent(plan) {
         '- Manual spot-check of the changed behaviour.',
   );
   lines.push('');
+  pushLeftovers(lines, plan, leftovers);
   pushConstraints(lines);
   return lines.join('\n');
+}
+
+/**
+ * Append every section the four intents did not claim, under one wrapper
+ * heading, with the author's original casing preserved.
+ *
+ * @param {string[]} lines
+ * @param {ParsedPlan} plan
+ * @param {string[]} leftovers   Lowercased section keys, in document order.
+ */
+function pushLeftovers(lines, plan, leftovers) {
+  if (leftovers.length === 0) return;
+  lines.push('## Additional specification context');
+  lines.push('');
+  lines.push(
+    '_Carried over verbatim from the source plan — these sections are part of the spec, not commentary._',
+  );
+  lines.push('');
+  for (const key of leftovers) {
+    lines.push(`### ${plan.headings?.[key] ?? key}`);
+    lines.push('');
+    lines.push(String(plan.sections[key]).trim());
+    lines.push('');
+  }
 }
 
 /**
