@@ -112,6 +112,10 @@ export async function resolveBin() {
  */
 
 /**
+ * Flags only — the prompt itself travels over stdin (see runHeadless).
+ * Windows caps the entire command line at 32,767 characters, which a
+ * review diff blows straight past; stdin has no such limit.
+ *
  * @param {BuildArgsInput} opts
  * @returns {string[]}
  */
@@ -122,7 +126,6 @@ export function buildArgs(opts) {
   if (opts.cloud) args.push('--cloud');
   if (opts.resumeChatId) args.push(`--resume=${opts.resumeChatId}`);
   else if (opts.resumeLatest) args.push('--resume');
-  args.push(opts.prompt);
   return args;
 }
 
@@ -158,12 +161,16 @@ export async function runHeadless(opts) {
   const args = buildArgs(opts);
   const child = spawn(bin, args, {
     cwd: opts.cwd ?? process.cwd(),
-    stdio: ['ignore', 'pipe', 'pipe'],
+    stdio: ['pipe', 'pipe', 'pipe'],
     env: process.env,
   });
-  if (!child.stdout || !child.stderr) {
-    throw new Error('cursor-agent spawn failed: stdout/stderr not attached');
+  if (!child.stdin || !child.stdout || !child.stderr) {
+    throw new Error('cursor-agent spawn failed: stdio not attached');
   }
+  // EPIPE fires when the child dies before draining stdin (bad model id,
+  // auth failure) — the close handler already reports that exit.
+  child.stdin.on('error', () => {});
+  child.stdin.end(opts.prompt);
   const childStdout = child.stdout;
   const childStderr = child.stderr;
   const logStream = createWriteStream(opts.logPath, { flags: 'a' });

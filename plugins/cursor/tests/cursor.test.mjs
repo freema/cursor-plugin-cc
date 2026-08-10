@@ -13,7 +13,11 @@ describe('buildArgs', () => {
     expect(args).toContain('--trust');
     expect(args).toContain('--model');
     expect(args).toContain('composer-2.5');
-    expect(args.at(-1)).toBe('hi');
+  });
+
+  it('never puts the prompt on the command line (Windows 32k argv limit, #26)', () => {
+    const args = buildArgs({ prompt: 'hi', model: 'composer-2.5' });
+    expect(args).not.toContain('hi');
   });
 
   it('omits --force when force=false', () => {
@@ -129,5 +133,26 @@ describe('runHeadless against stub binary', () => {
     expect(extractChatId(result.events)).toBe('chat_abc123');
     const summary = summariseEvents(result.events);
     expect(summary.filesTouched.length).toBeGreaterThan(0);
+  });
+
+  it('delivers a prompt far beyond the Windows argv limit via stdin (#26)', async () => {
+    const promptOut = `${tmp.dir}/prompt.txt`;
+    process.env.CURSOR_AGENT_STUB_PROMPT_OUT = promptOut;
+    try {
+      // 8× the 32,767-char Windows command-line cap — matches MAX_DIFF_BYTES.
+      const prompt = 'diff line with some content\n'.repeat(9_600);
+      expect(prompt.length).toBeGreaterThan(8 * 32_767);
+      const result = await runHeadless({
+        prompt,
+        model: 'composer-2.5',
+        force: false,
+        logPath: `${tmp.dir}/run.ndjson`,
+        timeoutSec: 10,
+      });
+      expect(result.exitCode).toBe(0);
+      expect(readFileSync(promptOut, 'utf8')).toBe(prompt);
+    } finally {
+      delete process.env.CURSOR_AGENT_STUB_PROMPT_OUT;
+    }
   });
 });
