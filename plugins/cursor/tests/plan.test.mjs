@@ -230,6 +230,50 @@ describe('buildTaskContent', () => {
     expect(out).not.toContain('## Additional specification context');
   });
 
+  it('keeps genuine Risk/Effort spec sections in the leftovers (#25)', () => {
+    const raw = [
+      '# RFC-shaped plan',
+      '',
+      '## Overview',
+      '',
+      'Why we do this.',
+      '',
+      '## Risk mitigation',
+      '',
+      '- Feature-flag the rollout; migrations must be reversible.',
+      '',
+      '## Risk assessment',
+      '',
+      'Data loss is the critical scenario.',
+      '',
+      '## Effort estimation notes',
+      '',
+      'Sizing assumes the schema is frozen.',
+      '',
+      '## Effort / risks',
+      '',
+      'Reviewer-only sizing commentary.',
+      '',
+    ].join('\n');
+    const { title, sections, headings } = splitSections(raw);
+    const out = buildTaskContent({
+      path: '/tmp/rfc.md',
+      title,
+      slug: 'rfc-shaped-plan',
+      sections,
+      headings,
+      raw,
+    });
+    // Real spec sections that merely start with "Risk"/"Effort" pass through…
+    expect(out).toContain('Risk mitigation');
+    expect(out).toContain('migrations must be reversible');
+    expect(out).toContain('Risk assessment');
+    expect(out).toContain('Data loss is the critical scenario.');
+    expect(out).toContain('Effort estimation notes');
+    // …while the exact plan-mode heading is still dropped.
+    expect(out).not.toContain('Reviewer-only sizing commentary.');
+  });
+
   it('maps common spec-driven headings onto the task sections', () => {
     const raw = [
       '# Spec-shaped plan',

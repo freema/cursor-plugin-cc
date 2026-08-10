@@ -249,13 +249,13 @@ const SECTION_HINTS = {
 
 // Plan-mode commentary that is written for the human reviewer, not for the
 // implementing agent. These are dropped on purpose and never surface in the
-// leftover pass-through below.
+// leftover pass-through below. Exact plan-mode headings only — generic
+// entries like bare `risk`/`risks`/`effort` would prefix-match legitimate
+// spec sections ("Risk mitigation", "Risk assessment") and silently discard
+// implementation-relevant constraints (#25); those now pass through instead.
 const DROPPED_SECTIONS = [
   'effort / risks',
   'effort/risks',
-  'effort',
-  'risks',
-  'risk',
   'open questions',
   'alternatives considered',
   'notes to reviewer',
