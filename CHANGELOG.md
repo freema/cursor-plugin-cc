@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.6.1 — stdin prompt delivery on Windows, exact-match drop-list
+
+### Fixed
+
+- **`/cursor:review` works on Windows again** (#26). The prompt — which for a review carries the whole diff — was passed to `cursor-agent` as a single argv element. Windows caps the entire command line at 32,767 characters and Node's `spawn` rejects anything longer with `ENAMETOOLONG`, so any realistic diff failed (`MAX_DIFF_BYTES` is 8× that cap). The prompt now travels over **stdin** on all platforms, which has no such limit; `buildArgs` carries flags only. A regression test pushes a 260 KB prompt through `runHeadless`.
+- **`/cursor:from-plan` no longer discards genuine `Risk*`/`Effort*` spec sections** (#25). The reviewer-commentary drop-list contained bare `risk`/`risks`/`effort` entries with prefix matching, so real sections like `## Risk mitigation` or `## Risk assessment` — common in RFCs and PRP-style documents, often carrying implementation-relevant constraints — were silently dropped, against the spirit of 0.6.0's lossless pass-through. The list now holds only the exact plan-mode headings (`Effort / risks`, `Open questions`, `Alternatives considered`, `Notes to reviewer`); everything else flows into `## Additional specification context`.
+
 ## 0.6.0 — spec-derived task destination, lossless section mapping, multi-repo from-plan
 
 ### Fixed
