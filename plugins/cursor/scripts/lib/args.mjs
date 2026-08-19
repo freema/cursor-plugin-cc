@@ -212,6 +212,140 @@ export function parseCommandArgv(rawArgv, booleans = []) {
 }
 
 /**
+ * Scan a packed command string for a LEADING run of flag tokens and return
+ * them together with the raw, untouched remainder.
+ *
+ * Flag spans are recognised only at the start of the string: the first span
+ * that does not begin with `--` — or an explicit `--` span — ends flag
+ * parsing, and `rest` is the original substring from that point on (quotes,
+ * backslashes, whitespace and flag-like words all survive verbatim).
+ *
+ * A non-boolean flag that consumes the following span as its value is folded
+ * into a single `--name=value` token, so `parseArgv` re-derives the same
+ * flag/value pairing through its inline-value path and never re-decides
+ * whether the value span "looks like a flag".
+ *
+ * @param {string} input
+ * @param {string[]} [booleans]  Flag names that never consume a value span.
+ * @returns {{tokens: string[], rest: string}}
+ */
+export function splitLeadingFlags(input, booleans = []) {
+  const booleanSet = new Set();
+  for (const b of booleans) {
+    booleanSet.add(b);
+    booleanSet.add(kebabToCamel(b));
+  }
+  /** @type {string[]} */
+  const tokens = [];
+  let i = 0;
+  const isWs = (ch) => ch === ' ' || ch === '\t' || ch === '\n';
+  const skipWs = () => {
+    while (i < input.length && isWs(input[i])) i += 1;
+  };
+  // Read one whitespace-delimited span with the same quote/escape rules as
+  // splitArgString, advancing `i` past it. Returns the unquoted span text.
+  const readSpan = () => {
+    let cur = '';
+    /** @type {'"'|"'"|null} */
+    let quote = null;
+    let escape = false;
+    while (i < input.length) {
+      const ch = input[i];
+      if (escape) {
+        cur += ch;
+        escape = false;
+        i += 1;
+        continue;
+      }
+      if (ch === '\\' && quote !== "'") {
+        escape = true;
+        i += 1;
+        continue;
+      }
+      if (quote) {
+        if (ch === quote) quote = null;
+        else cur += ch;
+        i += 1;
+        continue;
+      }
+      if (ch === '"' || ch === "'") {
+        quote = ch;
+        i += 1;
+        continue;
+      }
+      if (isWs(ch)) break;
+      cur += ch;
+      i += 1;
+    }
+    if (escape) cur += '\\';
+    return cur;
+  };
+
+  skipWs();
+  while (i < input.length) {
+    const spanStart = i;
+    const span = readSpan();
+    if (span === '--') {
+      // Explicit delimiter: everything after it is the verbatim body. This is
+      // also the escape hatch for a body that itself begins with `--`.
+      skipWs();
+      return { tokens, rest: input.slice(i) };
+    }
+    if (!span.startsWith('--') || span.length <= 2) {
+      return { tokens, rest: input.slice(spanStart) };
+    }
+    const eq = span.indexOf('=');
+    const name = span.slice(2, eq === -1 ? undefined : eq);
+    const takesValue =
+      eq === -1 &&
+      !name.startsWith('no-') &&
+      !booleanSet.has(name) &&
+      !booleanSet.has(kebabToCamel(name));
+    skipWs();
+    if (takesValue && i < input.length && !(input[i] === '-' && input[i + 1] === '-')) {
+      tokens.push(`${span}=${readSpan()}`);
+      skipWs();
+      continue;
+    }
+    tokens.push(span);
+  }
+  return { tokens, rest: '' };
+}
+
+/**
+ * Prompt-style argv collapse for commands whose trailing operand is free text
+ * (a task brief). Contract: flags come BEFORE the task text. Only a leading
+ * run of flag tokens is parsed as flags; the first non-flag span ends flag
+ * parsing and everything from there on is kept as ONE verbatim positional —
+ * flag-like words (`--config`, `--no-index`, …), quotes and backslashes inside
+ * the body survive untouched. A flag typed AFTER the task text becomes part of
+ * the body (this differs from `collapseCommandArgv`, which re-tokenises the
+ * whole string and used to silently consume such words out of long briefs).
+ * A body that itself starts with `--` can be forced verbatim with an extra
+ * delimiter: `delegate.mjs [flags] -- -- "<body>"`.
+ *
+ * Handles both invocation shapes:
+ *   - direct CLI: real argv tokens, flags before `--`, body as one quoted arg
+ *   - slash command: `-- "$ARGUMENTS"` where the user's flags and text arrive
+ *     packed in a single string
+ *
+ * @param {string[]} rawArgv
+ * @param {string[]} [booleans]
+ * @returns {string[]}  Token array for `parseArgv`: leading flag tokens, then
+ *                      `['--', body]` when a body is present.
+ */
+export function collapsePromptArgv(rawArgv, booleans = []) {
+  const delimiterIdx = rawArgv.indexOf('--');
+  const firstHalf = delimiterIdx === -1 ? [] : rawArgv.slice(0, delimiterIdx);
+  const userRaw = (delimiterIdx === -1 ? rawArgv : rawArgv.slice(delimiterIdx + 1))
+    .join(' ')
+    .trim();
+  if (userRaw.length === 0) return [...firstHalf];
+  const { tokens, rest } = splitLeadingFlags(userRaw, booleans);
+  return rest.length > 0 ? [...firstHalf, ...tokens, '--', rest] : [...firstHalf, ...tokens];
+}
+
+/**
  * Normalise a `--timeout` flag value (which may be a number, a numeric string,
  * or junk) into a positive integer number of seconds, falling back to
  * `fallback` for anything non-finite or ≤ 0. Prevents `--timeout abc` → `NaN`
