@@ -185,6 +185,33 @@ describe('collapsePromptArgv', () => {
   });
 });
 
+// The review prompt path: same contract as delegate — flags lead, the focus
+// text is one verbatim trailing operand. Regression for flag-like words in a
+// focus brief being consumed as flags (2026-08-19).
+const REVIEW_BOOLEANS = ['background', 'wait', 'adversarial', 'git-check', 'help'];
+
+describe('collapsePromptArgv (review shape)', () => {
+  it('slash shape: leading flags parsed, focus with flag-like words kept raw', () => {
+    const focus = 'focus on the --config flag handling and --no-index paths';
+    const argv = ['--wait', '--', `--scope branch ${focus}`];
+    const r = parseArgv(collapsePromptArgv(argv, REVIEW_BOOLEANS), REVIEW_BOOLEANS);
+    expect(r.flags['wait']).toBe(true);
+    expect(r.flags['scope']).toBe('branch');
+    expect(r.positional.join(' ').trim()).toBe(focus);
+    expect(r.flags['config']).toBeUndefined();
+    expect(r.flags['no-index']).toBeUndefined();
+  });
+
+  it('worker re-spawn shape without a body parses flags only', () => {
+    const argv = ['--worker', 'abc123', '--scope', 'auto', '--timeout', '1800'];
+    const r = parseArgv(collapsePromptArgv(argv, REVIEW_BOOLEANS), REVIEW_BOOLEANS);
+    expect(r.flags['worker']).toBe('abc123');
+    expect(r.flags['scope']).toBe('auto');
+    expect(r.flags['timeout']).toBe(1800);
+    expect(r.positional).toEqual([]);
+  });
+});
+
 describe('collapseArguments', () => {
   it('returns empty for empty input', () => {
     expect(collapseArguments('')).toEqual([]);

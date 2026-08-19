@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { collapseCommandArgv, parseArgv, parseTimeout } from './lib/args.mjs';
+import { collapsePromptArgv, parseArgv, parseTimeout } from './lib/args.mjs';
 import { listConfiguredMcps, resolveModel, runHeadless } from './lib/cursor.mjs';
 import { isGitRepo, repoRoot } from './lib/git.mjs';
 import { id as newId } from './lib/id.mjs';
@@ -83,6 +83,14 @@ function usedBannedHttpClient(events) {
   return [...hits];
 }
 
+function stripSurroundingQuotes(token) {
+  const first = token[0];
+  if ((first === '"' || first === "'") && token.length >= 2 && token.endsWith(first)) {
+    return token.slice(1, -1);
+  }
+  return token;
+}
+
 function looksLikeUrl(token) {
   return (
     /^https?:\/\//i.test(token) || /^localhost(:\d+)?(\/|$)/i.test(token) || /^\/\//.test(token)
@@ -112,15 +120,21 @@ function parseFlags(argv) {
     flags['mcpCheck'] === false;
   const timeout = parseTimeout(flags['timeout']);
   const model = typeof flags['model'] === 'string' ? flags['model'] : undefined;
+  // `collapsePromptArgv` keeps everything after the leading flags as ONE
+  // verbatim positional. Split off the first span only when it looks like a
+  // URL; the rest stays untouched so flag-like words inside the description
+  // (`--config`, `--no-index`, …) survive.
+  const rest = positional.join(' ').trim();
   let url;
-  let descTokens = [];
-  if (positional.length > 0 && positional[0] && looksLikeUrl(positional[0])) {
-    url = normaliseUrl(positional[0]);
-    descTokens = positional.slice(1);
-  } else {
-    descTokens = positional.slice();
+  let description = rest;
+  const m = rest.match(/^(\S+)([\s\S]*)$/);
+  if (m && m[1]) {
+    const first = stripSurroundingQuotes(m[1]);
+    if (looksLikeUrl(first)) {
+      url = normaliseUrl(first);
+      description = (m[2] ?? '').trim();
+    }
   }
-  const description = descTokens.join(' ').trim();
   return {
     url,
     description,
@@ -160,7 +174,7 @@ async function preflightMcp() {
  * @returns {Promise<number>}
  */
 export async function main(rawArgv) {
-  const flags = parseFlags(collapseCommandArgv(rawArgv));
+  const flags = parseFlags(collapsePromptArgv(rawArgv, BOOLEAN_FLAGS));
   if (flags.description.length === 0) {
     process.stderr.write(
       'Error: no test description. Usage: `/cursor:browser [<url>] <what to verify...>`. URL is optional — if omitted, Cursor discovers it from `list_pages` / package.json / common ports. Examples: `/cursor:browser http://localhost:3000 "login flow works"` or `/cursor:browser "check the home page loads without console errors"`.\n',

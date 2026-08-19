@@ -64,6 +64,24 @@ describe('browser', () => {
     expect(job.prompt).toContain('(discover)');
   });
 
+  it('flag-like words inside the description survive verbatim', async () => {
+    const outSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    try {
+      const code = await browserMain([
+        '--no-git-check',
+        '--skip-mcp-check',
+        '--',
+        'http://localhost:3000 verify the --config panel renders and --no-index mode works',
+      ]);
+      expect(code).toBe(0);
+    } finally {
+      outSpy.mockRestore();
+    }
+    const job = listJobs(tmp.dir)[0];
+    expect(job.prompt).toContain('http://localhost:3000');
+    expect(job.prompt).toContain('--config panel renders and --no-index mode works');
+  });
+
   it('happy path: chrome-devtools MCP calls → status done', async () => {
     const outSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
     try {
