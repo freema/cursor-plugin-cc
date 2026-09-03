@@ -2,7 +2,7 @@
 import { spawn } from 'node:child_process';
 import { openSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { collapseCommandArgv, parseArgv, parseTimeout } from './lib/args.mjs';
+import { collapsePromptArgv, parseArgv, parseTimeout } from './lib/args.mjs';
 import { resolveModel, runHeadless } from './lib/cursor.mjs';
 import { collectReviewContext, isGitRepo, repoRoot } from './lib/git.mjs';
 import { id as newId } from './lib/id.mjs';
@@ -170,7 +170,7 @@ async function foreground(flags, context, jobId, root) {
   return result.exitCode;
 }
 
-function spawnBackground(jobId, argv, root) {
+function spawnBackground(jobId, argv, root, extraEnv = {}) {
   const selfPath = fileURLToPath(import.meta.url);
   // Base capture logs on the resolved repo root so they share the job's
   // jobs/<repo-hash>/ dir, and forward that root to the worker.
@@ -181,7 +181,12 @@ function spawnBackground(jobId, argv, root) {
   const child = spawn(process.execPath, [selfPath, '--worker', jobId, ...argv], {
     detached: true,
     stdio: ['ignore', out, err],
-    env: { ...process.env, CURSOR_PLUGIN_CC_WORKER: '1', CURSOR_PLUGIN_CC_REPO_ROOT: root },
+    env: {
+      ...process.env,
+      CURSOR_PLUGIN_CC_WORKER: '1',
+      CURSOR_PLUGIN_CC_REPO_ROOT: root,
+      ...extraEnv,
+    },
   });
   child.unref();
   return child.pid ?? -1;
@@ -221,13 +226,16 @@ async function runWorker(jobId, flags, root) {
  * @returns {Promise<number>}
  */
 export async function main(rawArgv) {
-  const flags = parseFlags(collapseCommandArgv(rawArgv));
+  const flags = parseFlags(collapsePromptArgv(rawArgv, BOOLEAN_FLAGS));
   // `cursor-agent --force` auto-approves any read tool the reviewer wants to
   // run for extra context; the prompt forbids writes and a post-flight check
   // flags any file the run touched anyway.
   flags.force = true;
 
   if (flags.worker) {
+    // The focus text is handed over verbatim via env to avoid a second
+    // collapse mangling it (same contract as delegate.mjs).
+    flags.focus = process.env.CURSOR_PLUGIN_CC_PROMPT ?? flags.focus;
     const root = process.env.CURSOR_PLUGIN_CC_REPO_ROOT ?? (await repoRoot(process.cwd()));
     await runWorker(flags.worker, flags, root);
     return 0;
@@ -272,8 +280,8 @@ export async function main(rawArgv) {
     if (flags.base) forwarded.push('--base', flags.base);
     forwarded.push('--scope', flags.scope);
     forwarded.push('--timeout', String(flags.timeout));
-    if (flags.focus) forwarded.push('--', flags.focus);
-    const pid = spawnBackground(jobId, forwarded, root);
+    const extraEnv = flags.focus ? { CURSOR_PLUGIN_CC_PROMPT: flags.focus } : {};
+    const pid = spawnBackground(jobId, forwarded, root, extraEnv);
     updateJob(root, jobId, { pid });
     process.stdout.write(
       `Review job \`${jobId}\` started in background (model \`${model}\`, pid ${pid}) — ${context.label}.\n`,

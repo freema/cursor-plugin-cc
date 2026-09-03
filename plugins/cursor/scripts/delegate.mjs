@@ -2,7 +2,7 @@
 import { spawn } from 'node:child_process';
 import { openSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { collapseCommandArgv, parseArgv, parseTimeout } from './lib/args.mjs';
+import { collapsePromptArgv, parseArgv, parseTimeout } from './lib/args.mjs';
 import { resolveModel, runHeadless } from './lib/cursor.mjs';
 import { isGitRepo, repoRoot } from './lib/git.mjs';
 import { id as newId } from './lib/id.mjs';
@@ -229,7 +229,7 @@ async function runWorker(jobId, flags, prompt, root) {
  * @returns {Promise<number>}
  */
 export async function main(rawArgv) {
-  const flags = parseFlags(collapseCommandArgv(rawArgv));
+  const flags = parseFlags(collapsePromptArgv(rawArgv, BOOLEAN_FLAGS));
 
   if (flags.worker) {
     // The prompt is handed over verbatim via env to avoid a second collapse
