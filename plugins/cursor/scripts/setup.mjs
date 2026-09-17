@@ -4,10 +4,16 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseCommandArgv } from './lib/args.mjs';
 import { getConfig, setConfigValue } from './lib/config.mjs';
-import { authStatus, listConfiguredMcps, listModels, resolveBin } from './lib/cursor.mjs';
+import {
+  authStatus,
+  describeBin,
+  listConfiguredMcps,
+  listModels,
+  resolveBin,
+  runAgent,
+} from './lib/cursor.mjs';
 import { repoRoot } from './lib/git.mjs';
 import { ensureDir, jobsDir, pluginHome } from './lib/paths.mjs';
-import { run } from './lib/run.mjs';
 
 function pluginRoot() {
   const envRoot = process.env.CLAUDE_PLUGIN_ROOT;
@@ -47,10 +53,10 @@ async function gatherDoctor() {
   /** @type {Array<[string, {ok: boolean, detail: string}]>} */
   const checks = [];
 
-  let bin = '';
+  let bin = null;
   try {
     bin = await resolveBin();
-    checks.push(['cursor-agent binary', { ok: true, detail: bin }]);
+    checks.push(['cursor-agent binary', { ok: true, detail: describeBin(bin) }]);
   } catch (err) {
     checks.push([
       'cursor-agent binary',
@@ -58,7 +64,7 @@ async function gatherDoctor() {
     ]);
   }
   if (bin) {
-    const ver = await run(bin, ['--version'], { timeoutMs: 5_000 });
+    const ver = await runAgent(['--version'], { timeoutMs: 5_000 });
     checks.push([
       'cursor-agent version',
       { ok: ver.exitCode === 0, detail: (ver.stdout || ver.stderr).trim() },
@@ -236,7 +242,7 @@ async function baseCheck() {
   const lines = ['### /cursor:setup\n'];
   try {
     const bin = await resolveBin();
-    lines.push(`- ✓ \`cursor-agent\` at \`${bin}\``);
+    lines.push(`- ✓ \`cursor-agent\` at \`${describeBin(bin)}\``);
     const auth = await authStatus();
     lines.push(
       auth.loggedIn

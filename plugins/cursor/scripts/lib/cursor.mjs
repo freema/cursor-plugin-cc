@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
-import { createWriteStream } from 'node:fs';
+import { createWriteStream, existsSync, readdirSync } from 'node:fs';
+import { join, win32 } from 'node:path';
 import { createInterface } from 'node:readline';
 import { parseLine } from './parse.mjs';
 import { run } from './run.mjs';
@@ -75,29 +76,172 @@ export function resolveModel(input) {
   return MODEL_ALIASES[key] ?? input.trim();
 }
 
-/** @type {string|null} */
+/**
+ * How to launch cursor-agent: an executable plus the arguments that precede
+ * cursor-agent's own. `args` is empty except on Windows, where the CLI is
+ * `node.exe index.js` (see resolveWindowsInstall).
+ *
+ * @typedef {Object} CursorAgentBin
+ * @property {string} command
+ * @property {string[]} args
+ */
+
+/** @type {CursorAgentBin|null} */
 let cachedBin = null;
 
 /**
- * @returns {Promise<string>}
+ * @returns {Promise<CursorAgentBin>}
  */
 export async function resolveBin() {
   if (cachedBin) return cachedBin;
   const override = process.env.CURSOR_AGENT_BIN?.trim();
   if (override && override.length > 0) {
-    cachedBin = override;
+    cachedBin = (process.platform === 'win32' && resolveWindowsPath(override)) || {
+      command: override,
+      args: [],
+    };
     return cachedBin;
   }
-  for (const candidate of ['cursor-agent', 'agent']) {
-    const res = await run('which', [candidate]);
-    if (res.exitCode === 0 && res.stdout.trim()) {
-      cachedBin = res.stdout.trim();
-      return cachedBin;
-    }
+  const found = process.platform === 'win32' ? await findOnWindows() : await findOnPath();
+  if (found) {
+    cachedBin = found;
+    return cachedBin;
   }
   throw new Error(
     'cursor-agent not found on PATH. Install from https://cursor.com/install or run /cursor:setup.',
   );
+}
+
+/**
+ * @param {CursorAgentBin} bin
+ * @returns {string}
+ */
+export function describeBin(bin) {
+  return [bin.command, ...bin.args].join(' ');
+}
+
+/**
+ * Run cursor-agent with `args` through the resolved launcher.
+ *
+ * @param {string[]} args
+ * @param {import('./run.mjs').RunOpts} [opts]
+ * @returns {Promise<import('./run.mjs').RunResult>}
+ */
+export async function runAgent(args, opts) {
+  const bin = await resolveBin();
+  return run(bin.command, [...bin.args, ...args], opts);
+}
+
+/**
+ * @returns {Promise<CursorAgentBin|null>}
+ */
+async function findOnPath() {
+  for (const candidate of ['cursor-agent', 'agent']) {
+    const res = await run('which', [candidate]);
+    if (res.exitCode === 0 && res.stdout.trim()) {
+      return { command: res.stdout.trim(), args: [] };
+    }
+  }
+  return null;
+}
+
+/**
+ * Windows has no `which`, and the official installer puts only `.cmd`/`.ps1`
+ * shims on PATH. `where` finds a shim and the runnable CLI is resolved from
+ * the install beside it. The default install location is the fallback for a
+ * PATH inherited from before the install — the installer only updates PATH
+ * for shells started afterwards.
+ *
+ * Both `where` and spawn() look in the current directory before PATH, so a
+ * repository could plant its own `where.exe` or `cursor-agent.exe`. Hence the
+ * absolute `where.exe` and the `$PATH:` pattern, which searches PATH only.
+ *
+ * @returns {Promise<CursorAgentBin|null>}
+ */
+async function findOnWindows() {
+  const where = win32.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'where.exe');
+  for (const candidate of ['cursor-agent', 'agent']) {
+    const res = await run(where, [`$PATH:${candidate}`]);
+    if (res.exitCode !== 0) continue;
+    for (const line of res.stdout.split(/\r?\n/)) {
+      const found = resolveWindowsPath(line.trim());
+      if (found) return found;
+    }
+  }
+  const localAppData = process.env.LOCALAPPDATA;
+  return localAppData ? resolveWindowsInstall(join(localAppData, 'cursor-agent')) : null;
+}
+
+/**
+ * Since Node's CVE-2024-27980 fix, spawn() rejects `.cmd`/`.bat` files unless
+ * it goes through a shell (EINVAL), so a shim path is translated into the
+ * install it launches. An `.exe` is spawnable as is; anything else is not a
+ * Windows launcher.
+ *
+ * @param {string} path
+ * @returns {CursorAgentBin|null}
+ */
+export function resolveWindowsPath(path) {
+  const ext = win32.extname(path).toLowerCase();
+  if (ext === '.exe') return { command: path, args: [] };
+  if (ext === '.cmd' || ext === '.bat' || ext === '.ps1') {
+    return resolveWindowsInstall(win32.dirname(path));
+  }
+  return null;
+}
+
+// Version directory names the official cursor-agent.ps1 accepts: the legacy
+// YYYY.MM.DD-commit form and YYYY.MM.DD-HH-MM-SS-commit with a build time.
+const VERSION_DIR_RE = /^(\d{4})\.(\d{1,2})\.(\d{1,2})(?:-(\d{2})-(\d{2})-(\d{2}))?-[a-f0-9]+$/;
+
+/**
+ * Newest first, non-version names dropped. cursor-agent.ps1 ranks by date
+ * only; same-day builds are additionally ordered by build time here, with the
+ * legacy form counting as midnight.
+ *
+ * @param {string[]} names
+ * @returns {string[]}
+ */
+export function sortVersionDirs(names) {
+  /** @type {{name: string, key: number[]}[]} */
+  const versions = [];
+  for (const name of names) {
+    const match = VERSION_DIR_RE.exec(name);
+    if (match) versions.push({ name, key: match.slice(1, 7).map((part) => Number(part ?? 0)) });
+  }
+  versions.sort((a, b) => {
+    for (let i = 0; i < a.key.length; i++) {
+      if (a.key[i] !== b.key[i]) return b.key[i] - a.key[i];
+    }
+    return 0;
+  });
+  return versions.map((v) => v.name);
+}
+
+/**
+ * Mirror of what the official cursor-agent.ps1 shim runs: a `node.exe` next
+ * to the shim if there is one, otherwise the newest `versions\<version>\`.
+ * Unlike the shim, a version directory without `node.exe` and `index.js`
+ * (an interrupted update) is skipped instead of being fatal.
+ *
+ * @param {string} root  Directory holding the shims, e.g. %LOCALAPPDATA%\cursor-agent.
+ * @returns {CursorAgentBin|null}
+ */
+export function resolveWindowsInstall(root) {
+  const dirs = [root];
+  try {
+    const entries = readdirSync(join(root, 'versions'), { withFileTypes: true });
+    const names = entries.filter((e) => e.isDirectory()).map((e) => e.name);
+    for (const name of sortVersionDirs(names)) dirs.push(join(root, 'versions', name));
+  } catch {
+    // No versions directory — only a node.exe beside the shim can work.
+  }
+  for (const dir of dirs) {
+    const node = join(dir, 'node.exe');
+    const entry = join(dir, 'index.js');
+    if (existsSync(node) && existsSync(entry)) return { command: node, args: [entry] };
+  }
+  return null;
 }
 
 /**
@@ -158,8 +302,7 @@ export function buildArgs(opts) {
  */
 export async function runHeadless(opts) {
   const bin = await resolveBin();
-  const args = buildArgs(opts);
-  const child = spawn(bin, args, {
+  const child = spawn(bin.command, [...bin.args, ...buildArgs(opts)], {
     cwd: opts.cwd ?? process.cwd(),
     stdio: ['pipe', 'pipe', 'pipe'],
     env: process.env,
@@ -286,8 +429,7 @@ export async function runHeadless(opts) {
  */
 export async function authStatus() {
   try {
-    const bin = await resolveBin();
-    const res = await run(bin, ['status'], { timeoutMs: 5_000 });
+    const res = await runAgent(['status'], { timeoutMs: 5_000 });
     const text = `${res.stdout}\n${res.stderr}`.toLowerCase();
     const loggedIn =
       res.exitCode === 0 &&
@@ -306,10 +448,9 @@ export async function authStatus() {
  */
 export async function listModels() {
   try {
-    const bin = await resolveBin();
-    const res = await run(bin, ['--list-models'], { timeoutMs: 10_000 });
+    const res = await runAgent(['--list-models'], { timeoutMs: 10_000 });
     if (res.exitCode !== 0) {
-      const fallback = await run(bin, ['models'], { timeoutMs: 10_000 });
+      const fallback = await runAgent(['models'], { timeoutMs: 10_000 });
       return fallback.stdout
         .split('\n')
         .map((l) => l.trim())
@@ -336,8 +477,7 @@ export async function listModels() {
  */
 export async function listConfiguredMcps() {
   try {
-    const bin = await resolveBin();
-    const res = await run(bin, ['mcp', 'list'], { timeoutMs: 5_000 });
+    const res = await runAgent(['mcp', 'list'], { timeoutMs: 5_000 });
     if (res.exitCode !== 0) return [];
     // Strip ANSI control sequences — cursor-agent writes them even under `run`.
     // eslint-disable-next-line no-control-regex
@@ -374,8 +514,7 @@ export async function listConfiguredMcps() {
  */
 export async function listSessions(cwd = process.cwd()) {
   try {
-    const bin = await resolveBin();
-    const res = await run(bin, ['ls', '--output-format', 'json'], {
+    const res = await runAgent(['ls', '--output-format', 'json'], {
       cwd,
       timeoutMs: 5_000,
     });
