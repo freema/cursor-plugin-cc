@@ -473,7 +473,7 @@ The task file stays in `tasks/` as a durable record — the contract between pla
 | Env var                          | Purpose                                                                                                                                                                              |
 | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `CURSOR_API_KEY`                 | Forwarded to `cursor-agent`. Optional — `cursor-agent login` is usually enough.                                                                                                      |
-| `CURSOR_AGENT_BIN`               | Override binary path (used by the test suite).                                                                                                                                       |
+| `CURSOR_AGENT_BIN`               | Override binary path (used by the test suite). On Windows it may point at the `cursor-agent.cmd`/`.ps1` shim; the install next to it is launched directly.                           |
 | `CURSOR_PLUGIN_CC_HOME`          | Override the jobs-registry root. Default: an existing `~/.cursor-plugin-cc` if present, else Claude Code's plugin data dir (`CLAUDE_PLUGIN_DATA/state`), else `~/.cursor-plugin-cc`. |
 | `CURSOR_PLUGIN_CC_DEFAULT_MODEL` | Default `--model` when none is passed. Accepts the same aliases as `--model` (e.g. `composer`, `opus`). Falls back to `auto`.                                                        |
 

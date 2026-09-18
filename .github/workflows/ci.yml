@@ -40,3 +40,29 @@ jobs:
 
       - name: Typecheck
         run: npm run typecheck
+
+  # The main matrix has no Windows runner and most of the suite assumes POSIX
+  # paths, so this job runs only the cursor-agent launch tests, which spawn a
+  # real node.exe through the installer layout (#27).
+  windows-bin:
+    name: windows-latest / node 22 / cursor-agent launch
+    runs-on: windows-latest
+    timeout-minutes: 10
+
+    defaults:
+      run:
+        working-directory: plugins/cursor
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: plugins/cursor/package-lock.json
+
+      - run: npm ci
+
+      - name: Test
+        run: npx vitest run tests/windows-bin.test.mjs
