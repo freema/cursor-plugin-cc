@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.6.2 — cursor-agent on Windows, verbatim prompt bodies
+
+### Fixed
+
+- **The plugin now finds and launches `cursor-agent` on Windows** (#27, #29). `resolveBin()` probed with `which`, which Windows doesn't have, so every command failed with `cursor-agent not found on PATH`. Finding the binary would not have been enough either: the official Windows installer ships no `.exe`, only `cursor-agent.cmd` / `.ps1` shims, and since Node's CVE-2024-27980 fix `spawn()` rejects `.cmd` files without a shell (`EINVAL`). The launcher now resolves the way `cursor-agent.ps1` does — `node.exe` next to the shim, otherwise the newest complete `versions\<version>\` holding `node.exe` + `index.js` — located via an absolute `where.exe`, with a `%LOCALAPPDATA%\cursor-agent` fallback for sessions whose PATH predates the install. `CURSOR_AGENT_BIN` may point at the shim. macOS and Linux behaviour is unchanged. A new `windows-latest` CI job exercises the real installer layout end to end. Thanks @vilnis for the diagnosis and for testing on Windows 11.
+- **Flag-like words in free text are no longer swallowed** (#28). The text after the flags of `/cursor:delegate`, `/cursor:review` and `/cursor:browser` was re-tokenised, so words such as `--config custom.yaml` or `--no-index` inside a brief silently vanished from the prompt (a non-boolean one also ate the next word), and quotes and backslashes were stripped. Only a leading run of flags is now parsed; everything from the first non-flag word on reaches `cursor-agent` verbatim. Flags must therefore precede the text; a body that itself starts with `--` can be forced verbatim with `-- --`.
+
 ## 0.6.1 — stdin prompt delivery on Windows, exact-match drop-list
 
 ### Fixed
