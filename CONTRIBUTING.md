@@ -16,6 +16,8 @@ npm test
 npm run lint
 ```
 
+The dev tooling needs Node 20 or newer (vitest 4). The plugin itself supports Node ≥ 18.18, so keep `scripts/` free of APIs newer than that; CI loads every script on 18.18.
+
 No build, no bundler. `scripts/*.mjs` runs directly via `node`. If `node_modules/` needed in the install step surprised you, that is only for running tests and the formatter; the shipped plugin itself needs zero dependencies.
 
 ## Branch naming
@@ -45,7 +47,7 @@ One short subject line, imperative mood, optional body explaining the **why**.
 
 1. Push your branch.
 2. Open a PR against `main`. The PR template asks for a summary and a test plan — fill both.
-3. CI runs the test matrix (Node 18.18 / 20 / 22 × Ubuntu / macOS). All six must pass.
+3. CI runs the test matrix (Node 20 / 22 × Ubuntu / macOS), a runtime smoke check on Node 18.18, and the Windows launch tests. All must pass.
 4. The maintainer reviews, suggests changes, or merges. **Squash merge** is the default.
 5. No direct pushes to `main` — branch protection enforces PR review.
 
