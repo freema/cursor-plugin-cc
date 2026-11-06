@@ -491,7 +491,7 @@ This re-opens the same Cursor session without going through Claude Code — hand
 
 ## FAQ
 
-**Does it need a special Node version?** Yes — ≥ 18.18. The CI matrix tests 18.18, 20, and 22 on Linux and macOS.
+**Does it need a special Node version?** Yes — ≥ 18.18. CI runs the full test suite on Node 20 and 22 (Linux and macOS) and a runtime smoke check on 18.18.
 
 **Does it use my existing Cursor auth?** Yes. The plugin shells out to your already-installed `cursor-agent`, which uses whatever session `cursor-agent login` set up (or `CURSOR_API_KEY` if you prefer).
 
@@ -555,7 +555,7 @@ Plugin users can skip this section — there is nothing to build.
 
 Contributors, read [`CONTRIBUTING.md`](./CONTRIBUTING.md) for the dev setup, branch naming, the "how to add a new slash command" recipe, and the release flow. The hard rules (zero runtime deps, no build step, etc.) live in [`AGENTS.md`](./AGENTS.md) — the same file `cursor-runner` tells Cursor to read before touching any repo. Reporting a vulnerability? See [`SECURITY.md`](./SECURITY.md).
 
-CI runs `npm test` and `npm run lint` on every PR across Node 18.18 / 20 / 22 on Ubuntu + macOS. No direct pushes to `main` — branch protection enforces PR review.
+CI runs `npm test` and `npm run lint` on every PR across Node 20 / 22 on Ubuntu + macOS, plus a runtime smoke check on Node 18.18 (the dev tooling needs Node 20+, the plugin does not). No direct pushes to `main` — branch protection enforces PR review.
 
 ## Roadmap
 

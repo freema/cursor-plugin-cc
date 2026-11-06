@@ -55,6 +55,44 @@ describe('review-output', () => {
     expect(res.ok).toBe(false);
   });
 
+  it('rejects a top level that is not an object', () => {
+    for (const block of ['[]', 'null', '"approve"']) {
+      const res = parseReviewOutput(`text\n\`\`\`json\n${block}\n\`\`\`\n`);
+      expect(res.ok).toBe(false);
+      if (!res.ok) expect(res.error).toBe('top level is not an object');
+    }
+  });
+
+  it('rejects a missing or blank summary', () => {
+    // `undefined` is dropped by JSON.stringify, so the key is absent.
+    for (const summary of [undefined, '   ']) {
+      const res = parseReviewOutput(withBlock({ ...GOOD, summary }));
+      expect(res.ok).toBe(false);
+      if (!res.ok) expect(res.error).toBe('missing summary');
+    }
+  });
+
+  it('rejects each way a single finding can be malformed', () => {
+    const finding = GOOD.findings[0];
+    const malformed = [
+      null,
+      'a string',
+      [finding],
+      { ...finding, severity: 'catastrophic' },
+      { ...finding, title: ' ' },
+      { ...finding, file: '' },
+      { ...finding, body: 42 },
+      { ...finding, line: 0 },
+      { ...finding, line: 1.5 },
+      { ...finding, recommendation: ['do this'] },
+    ];
+    for (const bad of malformed) {
+      const res = parseReviewOutput(withBlock({ ...GOOD, findings: [finding, bad] }));
+      expect(res.ok, JSON.stringify(bad)).toBe(false);
+      if (!res.ok) expect(res.error).toBe('findings missing or malformed');
+    }
+  });
+
   it('accepts null/absent line and missing next_steps', () => {
     const res = parseReviewOutput(
       withBlock({

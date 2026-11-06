@@ -15,7 +15,9 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
-        node: ['18.18', '20', '22']
+        # The dev toolchain (vitest 4 and the vite under it) needs Node 20+.
+        # The plugin itself still supports 18.18 — see the node-18 job below.
+        node: ['20', '22']
 
     defaults:
       run:
@@ -40,6 +42,53 @@ jobs:
 
       - name: Typecheck
         run: npm run typecheck
+
+  # `engines.node` is >=18.18, but no vitest release without known advisories
+  # runs on Node 18, so the suite cannot. The shipped scripts have no
+  # dependencies, so this job needs no `npm ci`: it checks on the oldest
+  # supported Node that every script parses and loads (which resolves all
+  # their `node:` imports), and runs one command end to end.
+  node-18:
+    name: ubuntu-latest / node 18.18 / runtime smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    defaults:
+      run:
+        working-directory: plugins/cursor
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '18.18'
+
+      - name: Parse every script
+        run: |
+          for f in scripts/*.mjs scripts/lib/*.mjs; do
+            node --check "$f"
+          done
+
+      - name: Load every script
+        run: |
+          node --input-type=module -e "
+          import { readdirSync } from 'node:fs';
+          import { resolve } from 'node:path';
+          import { pathToFileURL } from 'node:url';
+          let loaded = 0;
+          for (const dir of ['scripts', 'scripts/lib']) {
+            for (const file of readdirSync(dir)) {
+              if (!file.endsWith('.mjs')) continue;
+              await import(pathToFileURL(resolve(dir, file)).href);
+              loaded += 1;
+            }
+          }
+          console.log('loaded ' + loaded + ' modules on Node ' + process.versions.node);
+          "
+
+      - name: Run a command
+        run: node scripts/status.mjs
 
   # The main matrix has no Windows runner and most of the suite assumes POSIX
   # paths, so this job runs only the cursor-agent launch tests, which spawn a

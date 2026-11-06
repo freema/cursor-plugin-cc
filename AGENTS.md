@@ -31,10 +31,10 @@ Plus a **Constraints** block that forbids: touching files outside the list, rena
 ## How to make a change
 
 1. Branch named `feat/…`, `fix/…`, `refactor/…`, or `docs/…`.
-2. Work inside `plugins/cursor/`. `cd plugins/cursor && npm install` installs dev deps (vitest, eslint, prettier, typescript — dev-time only).
+2. Work inside `plugins/cursor/`. `cd plugins/cursor && npm install` installs dev deps (vitest, eslint, prettier, typescript — dev-time only; they need Node 20+, while the shipped scripts must keep running on Node 18.18).
 3. Run tests: `npm test`. Run lint: `npm run lint`. Run types: `npm run typecheck`. All three must be green before committing.
 4. Commit messages in conventional style (`type(scope): subject`).
-5. Open a PR against `main` with a summary + test plan. CI must pass across Node 18.18 / 20 / 22 × Ubuntu / macOS.
+5. Open a PR against `main` with a summary + test plan. CI must pass: the suite on Node 20 / 22 × Ubuntu / macOS, a runtime smoke check on Node 18.18, and the Windows launch tests.
 6. Squash-merge only.
 
 ## Guardrails for automated edits
